@@ -1,5 +1,7 @@
 # Agentic AI PoC - Technical Challenge
 
+> **IMPORTANT NOTE**: **DO NOT** create a branch or raise a PR on this repository. Instead, you must **fork this repository** and share your solution with the hiring manager.
+
 Your objective is to build a minimal agent-based AI assistant that can summarize and extract key recommendations from sell-side cross-asset research reports (from investment banks like Goldman Sachs, JP Morgan, UBS, etc.) to compare with internal investment views.
 
 ### Core Requirements
