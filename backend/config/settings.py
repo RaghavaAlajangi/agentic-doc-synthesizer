@@ -1,4 +1,3 @@
-# Configuration settings for AGI Technical Challenge
 import os
 
 from pydantic_settings import BaseSettings
@@ -32,8 +31,6 @@ class Settings(BaseSettings):
     # ==================== ChromaDB Configuration ====================
     external_chroma_host: str = os.getenv("EXTERNAL_CHROMA_HOST", "localhost")
     external_chroma_port: int = int(os.getenv("EXTERNAL_CHROMA_PORT", "8001"))
-    internal_chroma_host: str = os.getenv("INTERNAL_CHROMA_HOST", "localhost")
-    internal_chroma_port: int = int(os.getenv("INTERNAL_CHROMA_PORT", "8002"))
 
     # ==================== Document Processing ====================
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "1000"))
