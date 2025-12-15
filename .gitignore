@@ -350,3 +350,6 @@ docker-data/
 .env.local
 .env.development
 .env.production
+
+data/
+docs/
