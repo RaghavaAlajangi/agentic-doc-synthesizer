@@ -8,20 +8,21 @@ services:
       dockerfile: Dockerfile
     container_name: agi-backend
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    env_file:
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-test}
       - EXTERNAL_CHROMA_HOST=chroma-external
-      - EXTERNAL_CHROMA_PORT=8000
+      - EXTERNAL_CHROMA_PORT=${EXTERNAL_CHROMA_PORT:-8000}
     depends_on:
       - chroma-external
     volumes:
       - ./backend:/app
     networks:
       - agi-network
-    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000
+    command: python -m uvicorn main:app --host 0.0.0.0 --port ${API_PORT:-8000}
 
   # Frontend React service
   frontend:
@@ -30,14 +31,15 @@ services:
       dockerfile: Dockerfile
     container_name: agi-frontend
     ports:
-      - "3000:5173"
+      - "${FRONTEND_PORT:-5173}:5173"
+    env_file:
+      - .env
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
     depends_on:
       - backend
     networks:
       - agi-network
-    command: serve -s build -l 5173
 
   # External Chroma DB - for external/sell-side research reports
   chroma-external:
