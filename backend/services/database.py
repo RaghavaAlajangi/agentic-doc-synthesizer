@@ -12,7 +12,26 @@ logger = logging.getLogger(__name__)
 
 
 class ChromaDBService:
-    """Service for managing vector database (external research reports)"""
+    """
+    Vector database service for semantic search and storage.
+
+    Manages connections to Chroma vector database for storing and
+    searching document embeddings. Supports external research reports
+    and internal documents with semantic similarity search.
+
+    Attributes
+    ----------
+    external_host : str
+        Host address for external research database.
+    external_port : int
+        Port number for external research database.
+    embedding_model : OpenAIEmbeddings
+        Embedding model for vectorizing documents.
+    external_client : chromadb.Client
+        Chroma client for external research.
+    external_collection : Collection
+        Chroma collection for external documents.
+    """
 
     def __init__(
         self,
@@ -20,11 +39,19 @@ class ChromaDBService:
         external_port: int = None,
     ):
         """
-        Initialize ChromaDB service for external research reports
+        Initialize the ChromaDB service.
 
-        Args:
-            external_host: Host for external Chroma DB
-            external_port: Port for external Chroma DB
+        Sets up connections to vector database and initializes embedding
+        models for semantic search.
+
+        Parameters
+        ----------
+        external_host : str, optional
+            Host for external Chroma database. Uses settings if not
+            provided.
+        external_port : int, optional
+            Port for external Chroma database. Uses settings if not
+            provided.
         """
         # Use provided parameters or settings
         self.external_host = external_host or settings.external_chroma_host
@@ -54,7 +81,26 @@ class ChromaDBService:
         logger.info(msg)
 
     def _init_chroma_client(self, host: str, port: int, db_name: str):
-        """Initialize Chroma client with error handling"""
+        """
+        Initialize Chroma database client with retry logic.
+
+        Attempts to connect to Chroma database with exponential backoff.
+        Falls back to stub client if connection fails after max retries.
+
+        Parameters
+        ----------
+        host : str
+            Database host address.
+        port : int
+            Database port number.
+        db_name : str
+            Name of database ('external' or 'internal').
+
+        Returns
+        -------
+        chromadb.Client or StubChromaClient
+            Initialized client or stub if connection fails.
+        """
         max_retries = 5
         retry_delay = 1
 
@@ -84,7 +130,29 @@ class ChromaDBService:
                 raise
 
     def _ensure_collection(self, client, collection_name: str):
-        """Lazily create collection on first use"""
+        """
+        Lazily create or retrieve a collection.
+
+        Creates collection on first use with appropriate metadata for
+        vector search (cosine similarity).
+
+        Parameters
+        ----------
+        client : chromadb.Client
+            Chroma client instance.
+        collection_name : str
+            Name of collection to create/retrieve.
+
+        Returns
+        -------
+        Collection
+            Chroma collection object.
+
+        Raises
+        ------
+        Exception
+            If collection creation fails.
+        """
         try:
             if hasattr(client, "_real_client"):
                 # Using stub client
@@ -100,7 +168,14 @@ class ChromaDBService:
 
     @property
     def external_collection_instance(self):
-        """Get external collection, creating if necessary"""
+        """
+        Lazy-load external collection.
+
+        Returns
+        -------
+        Collection
+            External research reports collection.
+        """
         if self.external_collection is None:
             self.external_collection = self._ensure_collection(
                 self.external_client, "external_reports"
@@ -108,7 +183,14 @@ class ChromaDBService:
         return self.external_collection
 
     async def health_check(self) -> Dict[str, str]:
-        """Check health of Chroma database"""
+        """
+        Check database health status.
+
+        Returns
+        -------
+        Dict[str, str]
+            Health status for each database.
+        """
         health = {}
         try:
             if hasattr(self.external_client, "_real_client"):
@@ -130,17 +212,28 @@ class ChromaDBService:
         metadata: Dict[str, Any] = None,
     ) -> str:
         """
-        Store a document chunk in the vector database
+        Store a document chunk with embedding in vector database.
 
-        Args:
-            content: Text content of the chunk
-            document_id: Unique document ID
-            filename: Original filename
-            chunk_id: Chunk number/sequence
-            metadata: Additional metadata
+        Embeds chunk content and stores with metadata for semantic
+        search.
 
-        Returns:
-            ID of the stored chunk
+        Parameters
+        ----------
+        content : str
+            Text content of the chunk.
+        document_id : str
+            Unique identifier for the document.
+        filename : str
+            Original filename of document.
+        chunk_id : int
+            Chunk sequence number.
+        metadata : Dict[str, Any], optional
+            Additional metadata to store.
+
+        Returns
+        -------
+        str
+            Unique chunk ID.
         """
         # Use external collection
         collection = self.external_collection_instance
@@ -192,7 +285,24 @@ class ChromaDBService:
     async def search_documents(
         self, query: str, n_results: int = 5
     ) -> List[Dict[str, Any]]:
-        """Search documents in vector database"""
+        """
+        Search for semantically similar documents.
+
+        Uses embedding similarity to find relevant documents matching
+        the query.
+
+        Parameters
+        ----------
+        query : str
+            Search query text.
+        n_results : int, optional
+            Number of results to return. Default is 5.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of matching documents with similarity scores.
+        """
         results = []
 
         # Compute query embedding using OpenAI
@@ -224,7 +334,21 @@ class ChromaDBService:
     def _format_results(
         self, chroma_results: Dict, source_type: str
     ) -> List[Dict[str, Any]]:
-        """Format Chroma search results"""
+        """
+        Format Chroma query results to standard format.
+
+        Parameters
+        ----------
+        chroma_results : Dict
+            Raw results from Chroma query.
+        source_type : str
+            Source type ('external' or 'internal').
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            Formatted results with content and metadata.
+        """
         formatted = []
         if not chroma_results or not chroma_results.get("documents"):
             return formatted
@@ -249,7 +373,19 @@ class ChromaDBService:
     async def get_all_documents(
         self, source_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Get all stored documents"""
+        """
+        Retrieve all stored documents with optional filtering.
+
+        Parameters
+        ----------
+        source_type : str, optional
+            Filter by 'external' or 'internal'. None returns all.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of documents with metadata.
+        """
         documents = []
         try:
             if source_type in [None, "external"]:
@@ -292,7 +428,24 @@ class ChromaDBService:
     async def delete_document(
         self, document_id: str, source_type: Optional[str] = None
     ) -> bool:
-        """Delete a document from storage"""
+        """
+        Delete a document and all its chunks from database.
+
+        Removes all vectors and metadata associated with a document.
+
+        Parameters
+        ----------
+        document_id : str
+            Document ID to delete.
+        source_type : str, optional
+            Delete from specific source ('external' or 'internal').
+            None deletes from all sources.
+
+        Returns
+        -------
+        bool
+            True if deletion succeeded.
+        """
         try:
             success = False
 

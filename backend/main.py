@@ -48,7 +48,20 @@ financial_data_service: FinancialDataService = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize services on startup"""
+    """
+    Initialize services on application startup.
+
+    Initializes all global service instances including database,
+    document processor, financial data service, and the multi-agent
+    orchestrator. Called automatically when the FastAPI application
+    starts.
+
+    Raises
+    ------
+    Exception
+        If any service fails to initialize, the error is logged and
+        re-raised.
+    """
     global db_service, doc_processor, orchestrator, financial_data_service
     try:
         logger.info("Initializing services...")
@@ -76,7 +89,16 @@ async def startup_event():
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """
+    Root API endpoint.
+
+    Returns information about the API including title and version.
+
+    Returns
+    -------
+    dict
+        Dictionary containing API title and version information.
+    """
     return {
         "message": settings.api_title,
         "version": settings.api_version,
@@ -85,7 +107,17 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """
+    Health check endpoint for service status.
+
+    Checks the health status of connected databases and services.
+
+    Returns
+    -------
+    dict
+        Dictionary with status ("healthy" or "unhealthy") and database
+        health information or error message.
+    """
     try:
         health = await db_service.health_check()
         return {"status": "healthy", "databases": health}
@@ -97,13 +129,27 @@ async def health_check():
 @app.post("/upload-document")
 async def upload_document(file: UploadFile = File(...)):
     """
-    Upload and process a research report PDF
+    Upload and process a research report document.
 
-    Args:
-        file: PDF file to upload
+    Accepts PDF or TXT files up to 10MB, processes them into chunks,
+    and stores them in the vector database for semantic search.
 
-    Returns:
-        Document upload response with chunk count
+    Parameters
+    ----------
+    file : UploadFile
+        The document file to upload (PDF or TXT format).
+
+    Returns
+    -------
+    DocumentUploadResponse
+        Response containing document ID, filename, file size,
+        chunk count, and metadata.
+
+    Raises
+    ------
+    HTTPException
+        If file format is invalid, size exceeds 10MB, or processing
+        fails.
     """
     try:
         if not file.filename:
@@ -181,13 +227,28 @@ async def upload_document(file: UploadFile = File(...)):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     """
-    Process chat query with agent-driven routing
+    Process chat query with agent-driven routing.
 
-    Args:
-        request: ChatRequest with query
+    Routes the query through the multi-agent orchestrator which
+    determines query intent and executes appropriate agents for
+    analysis, comparison, or lookup operations.
 
-    Returns:
-        ChatResponse with agent thoughts and answer
+    Parameters
+    ----------
+    request : ChatRequest
+        Request object containing the query string and optional
+        conversation ID.
+
+    Returns
+    -------
+    ChatResponse
+        Response containing synthesized answer, agent thoughts,
+        search results, and recommendations.
+
+    Raises
+    ------
+    HTTPException
+        If query processing fails.
     """
     try:
         response = await orchestrator.process_query(query=request.query)
@@ -210,13 +271,21 @@ async def chat(request: ChatRequest):
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """
-    Stream chat response with agent thoughts
+    Stream chat response with agent thoughts via Server-Sent Events.
 
-    Args:
-        request: ChatRequest with query
+    Streams individual agent thoughts and events as they occur during
+    query processing, enabling real-time progress feedback to the
+    client.
 
-    Returns:
-        Server-Sent Events stream
+    Parameters
+    ----------
+    request : ChatRequest
+        Request object containing the query string.
+
+    Yields
+    ------
+    str
+        Server-Sent Event formatted strings with streaming updates.
     """
 
     async def event_generator():
@@ -241,13 +310,27 @@ async def chat_stream(request: ChatRequest):
 @app.get("/documents")
 async def list_documents(source_type: str = None):
     """
-    List all stored documents
+    List all stored documents with optional filtering.
 
-    Args:
-        source_type: Filter by 'external' or 'internal'
+    Retrieves metadata for all uploaded documents with optional
+    filtering by source type.
 
-    Returns:
-        List of documents with metadata
+    Parameters
+    ----------
+    source_type : str, optional
+        Filter documents by source type ('external' or 'internal').
+        If None, returns all documents.
+
+    Returns
+    -------
+    dict
+        Dictionary containing total count and list of documents with
+        metadata.
+
+    Raises
+    ------
+    HTTPException
+        If retrieval fails.
     """
     try:
         documents = await db_service.get_all_documents(source_type=source_type)
@@ -260,14 +343,28 @@ async def list_documents(source_type: str = None):
 @app.delete("/documents/{document_id}")
 async def delete_document(document_id: str, source_type: str = "external"):
     """
-    Delete a document and all its chunks
+    Delete a document and all its associated chunks.
 
-    Args:
-        document_id: ID of document to delete
-        source_type: 'external' or 'internal'
+    Removes a document and all its vector embeddings from the
+    database.
 
-    Returns:
-        Success status
+    Parameters
+    ----------
+    document_id : str
+        Unique identifier of the document to delete.
+    source_type : str, optional
+        Type of source ('external' or 'internal'). Default is
+        'external'.
+
+    Returns
+    -------
+    dict
+        Success message.
+
+    Raises
+    ------
+    HTTPException
+        If document not found or deletion fails.
     """
     try:
         success = await db_service.delete_document(

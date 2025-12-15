@@ -30,10 +30,29 @@ logger = logging.getLogger(__name__)
 
 
 class AgentState(TypedDict):
-    """State shared across all agents in the graph"""
+    """
+    Shared state dictionary passed through all agents.
+
+    Attributes
+    ----------
+    query : str
+        The original user query.
+    query_type : str
+        Classified query type ('analysis', 'comparison', or 'lookup').
+    search_results : List[Dict[str, Any]]
+        Search results from vector database.
+    summary : Optional[str]
+        Summarized content from research documents.
+    financial_data : List[Dict[str, Any]]
+        Extracted financial metrics and data.
+    agent_thoughts : List[AgentThought]
+        Chronological log of agent decisions and reasoning.
+    final_response : str
+        Final synthesized response to the user.
+    """
 
     query: str
-    query_type: str  # 'analysis', 'comparison', 'lookup'
+    query_type: str
     search_results: List[Dict[str, Any]]
     summary: Optional[str]
     financial_data: List[Dict[str, Any]]
@@ -42,14 +61,48 @@ class AgentState(TypedDict):
 
 
 class SmartAgentOrchestrator:
-    """Smart multi-agent system using LangGraph"""
+    """
+    Multi-agent system orchestrator using LangGraph.
+
+    Implements a specialized agent network for query processing:
+    1. Router - Classifies query intent
+    2. Summarizer - Extracts key findings from documents
+    3. Financial Extractor - Pulls financial metrics
+    4. Comparator - Analyzes internal vs external views
+    5. Synthesizer - Generates final response
+
+    Agents execute conditionally based on routing decisions to optimize
+    processing for different query types.
+
+    Attributes
+    ----------
+    db : ChromaDBService
+        Vector database service for semantic search.
+    financial_data : FinancialDataService
+        Service for financial data retrieval.
+    llm : ChatOpenAI
+        Language model for agent reasoning.
+    tools : AgentToolRegistry
+        Registry of available tools for agents.
+    graph : CompiledGraph
+        Compiled LangGraph DAG for execution.
+    """
 
     def __init__(
         self,
         db_service: ChromaDBService,
         financial_data_service: FinancialDataService,
     ):
-        """Initialize with database and financial data services"""
+        """
+        Initialize the multi-agent orchestrator.
+
+        Parameters
+        ----------
+        db_service : ChromaDBService
+            Vector database service instance.
+        financial_data_service : FinancialDataService
+            Financial data service instance.
+        """
         self.db = db_service
         self.financial_data = financial_data_service
         self.llm = ChatOpenAI(
@@ -69,7 +122,17 @@ class SmartAgentOrchestrator:
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
-        """Build the LangGraph state machine with conditional routing"""
+        """
+        Build and configure the LangGraph DAG.
+
+        Constructs the directed acyclic graph with nodes for each agent
+        and conditional edges for routing based on query type.
+
+        Returns
+        -------
+        CompiledGraph
+            Compiled executable graph for processing queries.
+        """
         graph = StateGraph(AgentState)
 
         # Add nodes (agents)
@@ -109,7 +172,19 @@ class SmartAgentOrchestrator:
         return graph.compile()
 
     def _route_decision(self, state: AgentState) -> str:
-        """Determine which agent path to take"""
+        """
+        Determine execution path based on query classification.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current state containing query_type.
+
+        Returns
+        -------
+        str
+            Name of next agent node to execute.
+        """
         query_type = state.get("query_type", "analysis")
 
         if query_type == "comparison":
@@ -120,7 +195,22 @@ class SmartAgentOrchestrator:
             return "analysis"
 
     async def _route_agent(self, state: AgentState) -> AgentState:
-        """Determine query type without user input"""
+        """
+        Classify incoming query to determine processing path.
+
+        Analyzes query content for keywords indicating analysis,
+        lookup, or comparison operations.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current state with query text.
+
+        Returns
+        -------
+        AgentState
+            Updated state with query_type set.
+        """
         query = state["query"].lower()
 
         # Detect query intent
@@ -171,8 +261,21 @@ class SmartAgentOrchestrator:
 
     async def _summarize_agent(self, state: AgentState) -> AgentState:
         """
-        Summarize research reports.
-        Streams chunks of the summary as it processes.
+        Summarize research reports and key findings.
+
+        Searches for relevant documents matching the query and creates
+        a concise summary highlighting key findings, recommendations,
+        and investment thesis.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current state with query.
+
+        Returns
+        -------
+        AgentState
+            Updated state with summary and search_results.
         """
         query = state["query"]
 
@@ -251,7 +354,22 @@ class SmartAgentOrchestrator:
         return state
 
     async def _extract_financial_agent(self, state: AgentState) -> AgentState:
-        """Extract key financial data and statements"""
+        """
+        Extract financial metrics and data from documents.
+
+        Identifies and extracts key financial statements, metrics,
+        valuation data, and relevant numbers from research documents.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current state with query and search results.
+
+        Returns
+        -------
+        AgentState
+            Updated state with financial_data extracted.
+        """
         query = state["query"]
 
         # Search for relevant documents
@@ -273,24 +391,24 @@ class SmartAgentOrchestrator:
         )
 
         extraction_prompt = f"""
-Extract all key financial metrics, statements, and data points from
-this research report.
+        Extract all key financial metrics, statements, and data points from
+        this research report.
 
-Focus on:
-1. P/E ratios, valuation multiples
-2. Growth rates (earnings growth, revenue growth)
-3. Dividend yields
-4. Credit metrics (for fixed income)
-5. Asset allocations (for multi-asset)
-6. Price targets and return expectations
-7. Key assumptions
+        Focus on:
+        1. P/E ratios, valuation multiples
+        2. Growth rates (earnings growth, revenue growth)
+        3. Dividend yields
+        4. Credit metrics (for fixed income)
+        5. Asset allocations (for multi-asset)
+        6. Price targets and return expectations
+        7. Key assumptions
 
-Format the output as a structured list of key metrics with their values.
+        Format the output as a structured list of key metrics with their values.
 
-Research Content:
-{combined_content}
+        Research Content:
+        {combined_content}
 
-Provide extracted financial data in a clear, structured format.
+        Provide extracted financial data in a clear, structured format.
         """
 
         try:
@@ -332,8 +450,20 @@ Provide extracted financial data in a clear, structured format.
 
     async def _compare_agent(self, state: AgentState) -> AgentState:
         """
-        Compare external recommendations with internal views
-        (mock comparison using stored data).
+        Compare external analysis with internal views.
+
+        Analyzes differences between external research recommendations
+        and internal portfolio positions/views.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current state with query and external analysis.
+
+        Returns
+        -------
+        AgentState
+            Updated state with comparison results.
         """
         query = state["query"]
 
@@ -356,28 +486,29 @@ Provide extracted financial data in a clear, structured format.
 
         # Mock internal view
         internal_view = """
-MOCK INTERNAL ANALYSIS:
-- Maintain defensive positioning in equities
-- Prefer quality dividend stocks
-- Overweight government bonds with 5-7yr maturity
-- Reduce equity risk in near term
-- Monitor inflation data for fixed income strategy
+        MOCK INTERNAL ANALYSIS:
+        - Maintain defensive positioning in equities
+        - Prefer quality dividend stocks
+        - Overweight government bonds with 5-7yr maturity
+        - Reduce equity risk in near term
+        - Monitor inflation data for fixed income strategy
         """
 
         comparison_prompt = f"""
-Compare the external research recommendations with our internal views.
+        Compare the external research recommendations with our internal
+        views.
 
-EXTERNAL RESEARCH:
-{external_content}
+        EXTERNAL RESEARCH:
+        {external_content}
 
-INTERNAL VIEW:
-{internal_view}
+        INTERNAL VIEW:
+        {internal_view}
 
-Provide:
-1. Areas of agreement between external and internal views
-2. Key differences and divergences
-3. Risk factors each view emphasizes
-4. Recommended action based on both perspectives
+        Provide:
+        1. Areas of agreement between external and internal views
+        2. Key differences and divergences
+        3. Risk factors each view emphasizes
+        4. Recommended action based on both perspectives
         """
 
         try:
@@ -413,7 +544,22 @@ Provide:
             return state
 
     async def _synthesize_agent(self, state: AgentState) -> AgentState:
-        """Synthesize final response from all collected information"""
+        """
+        Generate final synthesized response.
+
+        Combines results from all preceding agents (summary, financial
+        data, comparisons) into a coherent final response to the user.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current state with all collected analysis.
+
+        Returns
+        -------
+        AgentState
+            Updated state with final_response generated.
+        """
         query = state["query"]
         summary = state.get("summary")
         financial_data = state.get("financial_data", [])
@@ -442,15 +588,16 @@ Provide:
         context = "\n\n".join(context_parts)
 
         synthesis_prompt = f"""
-Based on the analysis below, provide a concise answer to the user's query.
+        Based on the analysis below, provide a concise answer to the user's
+        query.
 
-USER QUERY: {query}
+        USER QUERY: {query}
 
-ANALYSIS:
-{context}
+        ANALYSIS:
+        {context}
 
-Provide a clear, actionable answer that addresses the user's question.
-Include specific data points and recommendations where applicable.
+        Provide a clear, actionable answer that addresses the user's question.
+        Include specific data points and recommendations where applicable.
         """
 
         try:
@@ -481,18 +628,42 @@ Include specific data points and recommendations where applicable.
         return state
 
     async def _run_graph_async(self, initial_state: AgentState) -> AgentState:
-        """Run the graph asynchronously"""
+        """
+        Execute the agent graph asynchronously.
+
+        Parameters
+        ----------
+        initial_state : AgentState
+            Initial state for graph execution.
+
+        Returns
+        -------
+        AgentState
+            Final state after graph execution.
+        """
         return await asyncio.to_thread(self.graph.invoke, initial_state)
 
     async def process_query(self, query: str) -> Dict[str, Any]:
         """
-        Process a query through the multi-agent graph
+        Process a query through the multi-agent orchestration graph.
 
-        Args:
-            query: User question
+        Routes the query through specialized agents for analysis,
+        summarization, financial extraction, and synthesis. Returns
+        complete results with agent reasoning steps.
 
-        Returns:
-            Response with agent thoughts, search results, and answer
+        Parameters
+        ----------
+        query : str
+            User question or research request.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing:
+                - response: Final synthesized answer
+                - agent_thoughts: List of agent reasoning steps
+                - search_results: Relevant document chunks
+                - recommendations: Investment recommendations
         """
         # Initialize state
         initial_state: AgentState = {
@@ -529,13 +700,21 @@ Include specific data points and recommendations where applicable.
         self, query: str
     ) -> AsyncGenerator[StreamEvent, None]:
         """
-        Stream query processing with agent thoughts
+        Stream query processing with real-time agent thoughts.
 
-        Args:
-            query: User question
+        Processes query through agents while yielding events for each
+        agent action, allowing real-time progress feedback to UI.
 
-        Yields:
-            StreamEvent objects for UI consumption
+        Parameters
+        ----------
+        query : str
+            User question or research request.
+
+        Yields
+        ------
+        StreamEvent
+            Event objects containing agent thoughts, actions, and
+            intermediate results.
         """
         initial_state: AgentState = {
             "query": query,

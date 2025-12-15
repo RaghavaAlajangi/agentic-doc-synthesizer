@@ -18,21 +18,42 @@ logger = logging.getLogger(__name__)
 
 
 class FinancialDataService:
-    """Service for managing financial data extraction and storage"""
+    """
+    SQLite-based financial data extraction and storage service.
+
+    Manages extraction and storage of financial data, summaries, and
+    statements from research documents.
+
+    Attributes
+    ----------
+    db_path : str
+        Path to SQLite database file.
+    conn : sqlite3.Connection
+        Database connection.
+    """
 
     def __init__(self, db_path: str = "financial_data.db"):
         """
-        Initialize Financial Data Service
+        Initialize the Financial Data Service.
 
-        Args:
-            db_path: Path to SQLite database file
+        Creates database and schema if they don't exist.
+
+        Parameters
+        ----------
+        db_path : str, optional
+            Path to SQLite database file. Default is 'financial_data.db'.
         """
         self.db_path = db_path
         self.conn = None
         self._init_db()
 
     def _init_db(self):
-        """Initialize database schema"""
+        """
+        Initialize database schema and tables.
+
+        Creates tables for document summaries, financial statements,
+        and key recommendations if they don't exist.
+        """
         try:
             self.conn = sqlite3.connect(self.db_path)
             self.conn.row_factory = sqlite3.Row
@@ -104,17 +125,25 @@ class FinancialDataService:
         asset_classes: Optional[List[str]] = None,
     ) -> bool:
         """
-        Store document summary
+        Store document summary in database.
 
-        Args:
-            summary_id: Unique ID for the summary
-            document_id: ID of the source document
-            filename: Original filename
-            summary: The summary text
-            asset_classes: List of asset classes covered
+        Parameters
+        ----------
+        summary_id : str
+            Unique identifier for the summary.
+        document_id : str
+            ID of source document.
+        filename : str
+            Original filename.
+        summary : str
+            Summary text.
+        asset_classes : List[str], optional
+            List of asset classes covered.
 
-        Returns:
-            True if successful
+        Returns
+        -------
+        bool
+            True if storage successful.
         """
         try:
             cursor = self.conn.cursor()
@@ -156,19 +185,29 @@ class FinancialDataService:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
-        Store extracted financial statement/data
+        Store extracted financial statement/data.
 
-        Args:
-            statement_id: Unique ID for the statement
-            document_id: ID of the source document
-            filename: Original filename
-            statement_type: Type like 'earnings', 'valuation', 'growth_metrics'
-            content: The statement content (can be JSON or text)
-            asset_class: Asset class (equity, fixed_income, etc.)
-            metadata: Additional metadata
+        Parameters
+        ----------
+        statement_id : str
+            Unique identifier for the statement.
+        document_id : str
+            ID of source document.
+        filename : str
+            Original filename.
+        statement_type : str
+            Type of statement ('earnings', 'valuation', 'growth_metrics').
+        content : str
+            Statement content (JSON or text format).
+        asset_class : str
+            Asset class ('equity', 'fixed_income', etc.).
+        metadata : Dict[str, Any], optional
+            Additional metadata dictionary.
 
-        Returns:
-            True if successful
+        Returns
+        -------
+        bool
+            True if storage successful.
         """
         try:
             cursor = self.conn.cursor()
@@ -210,18 +249,27 @@ class FinancialDataService:
         data_sources: Optional[List[str]] = None,
     ) -> bool:
         """
-        Store extracted recommendation
+        Store extracted recommendation.
 
-        Args:
-            rec_id: Unique ID for the recommendation
-            document_id: ID of the source document
-            asset_class: Asset class covered
-            recommendation: The recommendation text
-            confidence: Confidence score (0-1)
-            data_sources: List of data sources used
+        Parameters
+        ----------
+        rec_id : str
+            Unique identifier for recommendation.
+        document_id : str
+            ID of source document.
+        asset_class : str
+            Asset class covered.
+        recommendation : str
+            Recommendation text.
+        confidence : float
+            Confidence score (0-1).
+        data_sources : List[str], optional
+            List of data sources used.
 
-        Returns:
-            True if successful
+        Returns
+        -------
+        bool
+            True if storage successful.
         """
         try:
             cursor = self.conn.cursor()
@@ -254,7 +302,19 @@ class FinancialDataService:
             return False
 
     def get_summary(self, document_id: str) -> Optional[Dict[str, Any]]:
-        """Get summary for a document"""
+        """
+        Retrieve summary for a document.
+
+        Parameters
+        ----------
+        document_id : str
+            Document identifier.
+
+        Returns
+        -------
+        Dict[str, Any] or None
+            Summary dictionary if found, None otherwise.
+        """
         try:
             cursor = self.conn.cursor()
             cursor.execute(
@@ -272,7 +332,21 @@ class FinancialDataService:
     def get_financial_statements(
         self, document_id: str, statement_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Get financial statements for a document"""
+        """
+        Retrieve financial statements for a document.
+
+        Parameters
+        ----------
+        document_id : str
+            Document identifier.
+        statement_type : str, optional
+            Filter by specific statement type.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of matching financial statements.
+        """
         try:
             cursor = self.conn.cursor()
 
@@ -299,7 +373,21 @@ class FinancialDataService:
     def get_recommendations(
         self, document_id: str, asset_class: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Get recommendations for a document"""
+        """
+        Retrieve recommendations for a document.
+
+        Parameters
+        ----------
+        document_id : str
+            Document identifier.
+        asset_class : str, optional
+            Filter by specific asset class.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of matching recommendations.
+        """
         try:
             cursor = self.conn.cursor()
 
