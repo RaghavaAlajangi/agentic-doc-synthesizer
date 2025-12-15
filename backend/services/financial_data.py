@@ -1,5 +1,6 @@
 """
-SQLite service for storing extracted financial data and metadata from research reports.
+SQLite service for storing extracted financial data and metadata from
+research reports.
 
 This service handles:
 - Summary storage (document-level summaries)
@@ -64,7 +65,8 @@ class FinancialDataService:
                     metadata TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(document_id) REFERENCES document_summaries(document_id)
+                    FOREIGN KEY(document_id) REFERENCES document_summaries(
+                        document_id)
                 )
                 """
             )
@@ -79,7 +81,8 @@ class FinancialDataService:
                     confidence REAL,
                     data_sources TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(document_id) REFERENCES document_summaries(document_id)
+                    FOREIGN KEY(document_id) REFERENCES document_summaries(
+                        document_id)
                 )
                 """
             )
@@ -174,7 +177,8 @@ class FinancialDataService:
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO financial_statements
-                (id, document_id, filename, statement_type, content, asset_class, metadata, updated_at)
+                (id, document_id, filename, statement_type, content,
+                asset_class, metadata, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -228,7 +232,8 @@ class FinancialDataService:
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO key_recommendations
-                (id, document_id, asset_class, recommendation, confidence, data_sources)
+                (id, document_id, asset_class, recommendation, confidence,
+                data_sources)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (

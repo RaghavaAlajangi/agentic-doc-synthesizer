@@ -14,19 +14,13 @@ The agents are called conditionally based on the routing decision.
 import asyncio
 import json
 import logging
-import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional, TypedDict
 
 from config.settings import settings
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
-from models.schemas import (
-    AgentThought,
-    Recommendation,
-    SearchResult,
-    StreamEvent,
-)
+from models.schemas import AgentThought, StreamEvent
 
 from .agent_tools import AgentToolRegistry
 from .database import ChromaDBService
