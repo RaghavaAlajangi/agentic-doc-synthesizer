@@ -34,5 +34,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:5173/ || exit 1
 
 # Serve the application
-CMD ["serve", "-s", "build", "-l", "5173"]# Start application
-CMD ["serve", "-s", "dist", "-l", "5173"]
+CMD ["serve", "-s", "build", "-l", "5173"]
