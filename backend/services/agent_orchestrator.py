@@ -1,19 +1,7 @@
-"""
-Smart Multi-Agent Orchestrator using LangGraph.
-
-This implementation creates specialized agents:
-1. Router Agent - Determines query type (analysis, comparison, lookup)
-2. Summarizer Agent - Summarizes large documents
-3. Financial Extractor Agent - Extracts key financial data
-4. Comparison Agent - Compares with internal views (only when needed)
-5. Response Synthesizer - Creates final response
-
-The agents are called conditionally based on the routing decision.
-"""
-
 import asyncio
 import json
 import logging
+from enum import Enum
 from typing import Any, AsyncGenerator, Dict, List, Optional, TypedDict
 
 from config.settings import settings
@@ -29,6 +17,51 @@ from .financial_data import FinancialDataService
 logger = logging.getLogger(__name__)
 
 
+class TaskType(str, Enum):
+    """Types of tasks that can be executed"""
+
+    RAG_FETCH = "rag_fetch"  # Fetch relevant chunks from RAG
+    SUMMARIZE = "summarize"  # Summarize content
+    EXTRACT_FINANCIAL = "extract_financial"  # Extract financial data
+    COMPARE = "compare"  # Compare external with internal views
+    ANALYZE = "analyze"  # General analysis
+    SYNTHESIS = "synthesis"  # Final synthesis
+
+
+class Task(TypedDict):
+    """Represents a task to be executed"""
+
+    id: str
+    type: TaskType
+    description: str
+    query: Optional[str]
+    status: str  # "pending", "in_progress", "completed", "failed"
+    result: Optional[Dict[str, Any]]
+    error: Optional[str]
+
+
+class Citation(TypedDict):
+    """Source citation for retrieved information with rich metadata"""
+
+    document_id: str
+    document_name: str
+    page_number: Optional[int]
+    section: Optional[str]
+    chunk_index: int
+    content_snippet: str
+    # Enhanced metadata fields
+    company_name: Optional[str]
+    report_type: Optional[str]
+    report_date: Optional[str]
+    document_type: Optional[str]
+    author_analyst: Optional[str]
+    publication_date: Optional[str]
+    total_pages: Optional[int]
+    rating: Optional[str]
+    target_price: Optional[str]
+    similarity_score: Optional[float]
+
+
 class AgentState(TypedDict):
     """
     Shared state dictionary passed through all agents.
@@ -37,14 +70,20 @@ class AgentState(TypedDict):
     ----------
     query : str
         The original user query.
-    query_type : str
-        Classified query type ('analysis', 'comparison', or 'lookup').
+    tasks : List[Task]
+        Decomposed tasks to be executed.
+    task_results : Dict[str, Any]
+        Results from executed tasks, keyed by task ID.
     search_results : List[Dict[str, Any]]
         Search results from vector database.
+    citations : List[Citation]
+        Source citations for all retrieved information.
     summary : Optional[str]
         Summarized content from research documents.
     financial_data : List[Dict[str, Any]]
         Extracted financial metrics and data.
+    comparison_result : Optional[str]
+        Comparison analysis result.
     agent_thoughts : List[AgentThought]
         Chronological log of agent decisions and reasoning.
     final_response : str
@@ -52,27 +91,32 @@ class AgentState(TypedDict):
     """
 
     query: str
-    query_type: str
+    tasks: List[Task]
+    task_results: Dict[str, Any]
     search_results: List[Dict[str, Any]]
+    citations: List[Citation]
     summary: Optional[str]
     financial_data: List[Dict[str, Any]]
+    comparison_result: Optional[str]
     agent_thoughts: List[AgentThought]
     final_response: str
 
 
-class SmartAgentOrchestrator:
+class AgentOrchestrator:
     """
     Multi-agent system orchestrator using LangGraph.
 
-    Implements a specialized agent network for query processing:
-    1. Router - Classifies query intent
-    2. Summarizer - Extracts key findings from documents
-    3. Financial Extractor - Pulls financial metrics
-    4. Comparator - Analyzes internal vs external views
-    5. Synthesizer - Generates final response
+    Implements a flexible agent network for query processing:
+    1. Planning Agent (Router) - Breaks down complex queries into subtasks
+    2. RAG Agent - Fetches relevant chunks with source attribution
+    3. Summarizer - Extracts key findings from documents
+    4. Financial Extractor - Pulls financial metrics
+    5. Comparator - Analyzes internal vs external views
+    6. Task Executor - Dynamically executes tasks based on type
+    7. Synthesizer - Generates final response with citations
 
-    Agents execute conditionally based on routing decisions to optimize
-    processing for different query types.
+    Tasks are decomposed and executed dynamically based on their specific
+    requirements rather than following a fixed linear path.
 
     Attributes
     ----------
@@ -94,7 +138,7 @@ class SmartAgentOrchestrator:
         financial_data_service: FinancialDataService,
     ):
         """
-        Initialize the multi-agent orchestrator.
+        Initialize the dynamic multi-agent orchestrator.
 
         Parameters
         ----------
@@ -123,10 +167,10 @@ class SmartAgentOrchestrator:
 
     def _build_graph(self) -> StateGraph:
         """
-        Build and configure the LangGraph DAG.
+        Build and configure the dynamic LangGraph DAG.
 
-        Constructs the directed acyclic graph with nodes for each agent
-        and conditional edges for routing based on query type.
+        Constructs a directed acyclic graph with nodes for task
+        decomposition, RAG retrieval, and dynamic task execution.
 
         Returns
         -------
@@ -135,85 +179,118 @@ class SmartAgentOrchestrator:
         """
         graph = StateGraph(AgentState)
 
-        # Add nodes (agents)
-        graph.add_node("route", self._route_agent)
-        graph.add_node("summarize", self._summarize_agent)
-        graph.add_node("extract_financial", self._extract_financial_agent)
-        graph.add_node("compare", self._compare_agent)
+        # Add nodes for dynamic workflow
+        graph.add_node("planning_agent", self._planning_agent)
+        graph.add_node("fetch_rag", self._rag_agent)
+        graph.add_node("execute_tasks", self._execute_tasks_agent)
         graph.add_node("synthesize", self._synthesize_agent)
 
         # Set entry point
-        graph.set_entry_point("route")
+        graph.set_entry_point("planning_agent")
 
-        # After routing, decide path
-        graph.add_conditional_edges(
-            "route",
-            self._route_decision,
-            {
-                "analysis": "summarize",
-                "lookup": "extract_financial",
-                "comparison": "compare",
-                "end": END,
-            },
-        )
-
-        # After summarization, extract financial data
-        graph.add_edge("summarize", "extract_financial")
-
-        # After financial extraction, synthesize
-        graph.add_edge("extract_financial", "synthesize")
-
-        # After comparison, synthesize
-        graph.add_edge("compare", "synthesize")
-
-        # After synthesize, end
+        # Linear flow with dynamic task execution
+        graph.add_edge("planning_agent", "fetch_rag")
+        graph.add_edge("fetch_rag", "execute_tasks")
+        graph.add_edge("execute_tasks", "synthesize")
         graph.add_edge("synthesize", END)
 
         return graph.compile()
 
-    def _route_decision(self, state: AgentState) -> str:
+    def _planning_agent(self, state: AgentState) -> AgentState:
         """
-        Determine execution path based on query classification.
+        Plan and decompose complex query into subtasks.
+
+        Analyzes the query to determine what types of tasks need to be
+        executed. For example, a query asking about "comparison of
+        investment views" would generate tasks for RAG fetch, analysis,
+        and comparison.
 
         Parameters
         ----------
         state : AgentState
-            Current state containing query_type.
-
-        Returns
-        -------
-        str
-            Name of next agent node to execute.
-        """
-        query_type = state.get("query_type", "analysis")
-
-        if query_type == "comparison":
-            return "comparison"
-        elif query_type == "lookup":
-            return "lookup"
-        else:
-            return "analysis"
-
-    async def _route_agent(self, state: AgentState) -> AgentState:
-        """
-        Classify incoming query to determine processing path.
-
-        Analyzes query content for keywords indicating analysis,
-        lookup, or comparison operations.
-
-        Parameters
-        ----------
-        state : AgentState
-            Current state with query text.
+            Current state with query.
 
         Returns
         -------
         AgentState
-            Updated state with query_type set.
+            Updated state with decomposed tasks.
         """
         query = state["query"].lower()
+        tasks: List[Task] = []
 
-        # Detect query intent
+        # Always fetch relevant chunks first
+        task_id = "task_001"
+        tasks.append(
+            {
+                "id": task_id,
+                "type": TaskType.RAG_FETCH,
+                "description": "Fetch relevant chunks from documents",
+                "query": state["query"],
+                "status": "pending",
+                "result": None,
+                "error": None,
+            }
+        )
+
+        # Determine additional tasks based on query intent
+        task_counter = 2
+
+        # Check if summarization is needed
+        if any(
+            word in query
+            for word in [
+                "summarize",
+                "summary",
+                "overview",
+                "brief",
+                "key findings",
+            ]
+        ):
+            task_id = f"task_{task_counter:03d}"
+            tasks.append(
+                {
+                    "id": task_id,
+                    "type": TaskType.SUMMARIZE,
+                    "description": "Summarize relevant documents",
+                    "query": state["query"],
+                    "status": "pending",
+                    "result": None,
+                    "error": None,
+                }
+            )
+            task_counter += 1
+
+        # Check if financial extraction is needed
+        if any(
+            word in query
+            for word in [
+                "metrics",
+                "financial",
+                "data",
+                "p/e",
+                "valuation",
+                "earnings",
+                "revenue",
+                "dividend",
+                "yield",
+                "price target",
+            ]
+        ):
+            task_id = f"task_{task_counter:03d}"
+            tasks.append(
+                {
+                    "id": task_id,
+                    "type": TaskType.EXTRACT_FINANCIAL,
+                    "description": "Extract financial metrics and data",
+                    "query": state["query"],
+                    "status": "pending",
+                    "result": None,
+                    "error": None,
+                }
+            )
+            task_counter += 1
+
+        # Check if comparison is needed
         if any(
             word in query
             for word in [
@@ -228,44 +305,61 @@ class SmartAgentOrchestrator:
                 "position",
             ]
         ):
-            query_type = "comparison"
-        elif any(
-            word in query
-            for word in [
-                "find",
-                "what",
-                "which",
-                "show",
-                "list",
-                "extract",
-                "key",
-                "data",
-                "metrics",
-            ]
-        ):
-            query_type = "lookup"
-        else:
-            query_type = "analysis"
+            task_id = f"task_{task_counter:03d}"
+            tasks.append(
+                {
+                    "id": task_id,
+                    "type": TaskType.COMPARE,
+                    "description": (
+                        "Compare external analysis with internal views"
+                    ),
+                    "query": state["query"],
+                    "status": "pending",
+                    "result": None,
+                    "error": None,
+                }
+            )
+            task_counter += 1
 
-        thought = AgentThought(
-            agent_name="router",
-            thought=f"Identified query type as: {query_type}",
-            tool_used="query_classifier",
+        # Always add synthesis task
+        task_id = f"task_{task_counter:03d}"
+        tasks.append(
+            {
+                "id": task_id,
+                "type": TaskType.SYNTHESIS,
+                "description": "Synthesize results into final response",
+                "query": state["query"],
+                "status": "pending",
+                "result": None,
+                "error": None,
+            }
         )
 
-        state["query_type"] = query_type
+        state["tasks"] = tasks
+
+        thought = AgentThought(
+            agent_name="planning_agent",
+            thought=f"Decomposed query into {len(tasks)} tasks",
+            tool_used="planning_agent",
+            tool_output=(
+                f"Tasks: {', '.join([t['type'].value for t in tasks])}"
+            ),
+        )
         state["agent_thoughts"].append(thought)
 
-        logger.info(f"Route decision: {query_type}")
+        logger.info(
+            f"Decomposed query into {len(tasks)} tasks: "
+            f"{', '.join([t['type'].value for t in tasks])}"
+        )
         return state
 
-    async def _summarize_agent(self, state: AgentState) -> AgentState:
+    async def _rag_agent(self, state: AgentState) -> AgentState:
         """
-        Summarize research reports and key findings.
+        Retrieve relevant document chunks with source attribution.
 
-        Searches for relevant documents matching the query and creates
-        a concise summary highlighting key findings, recommendations,
-        and investment thesis.
+        Fetches relevant chunks from the vector database and stores
+        complete source information for citation purposes. Extracts rich
+        metadata including company name, report type, date, analyst, etc.
 
         Parameters
         ----------
@@ -275,28 +369,199 @@ class SmartAgentOrchestrator:
         Returns
         -------
         AgentState
-            Updated state with summary and search_results.
+            Updated state with search_results and citations with full
+            metadata.
         """
         query = state["query"]
 
-        # Search for relevant documents
-        search_results = await self.db.search_documents(query, n_results=3)
-        state["search_results"] = search_results
+        try:
+            # Search for relevant documents
+            search_results = await self.db.search_documents(query, n_results=5)
+            state["search_results"] = search_results
 
-        if not search_results:
+            # Extract and store citations with rich metadata
+            citations: List[Citation] = []
+            for idx, result in enumerate(search_results):
+                # Extract metadata from result
+                metadata = result.get("metadata", {})
+
+                citation: Citation = {
+                    # Core fields
+                    "document_id": result.get("document_id", "unknown"),
+                    "document_name": result.get("source", "Unknown Document"),
+                    "page_number": metadata.get("page", None),
+                    "section": metadata.get("section", None),
+                    "chunk_index": idx,
+                    "content_snippet": result.get("content", "")[:200],
+                    # Enhanced metadata fields
+                    "company_name": metadata.get("company_name", None),
+                    "report_type": metadata.get("report_type", None),
+                    "report_date": metadata.get("report_date", None),
+                    "document_type": metadata.get("document_type", None),
+                    "author_analyst": metadata.get("author_analyst", None),
+                    "publication_date": metadata.get("publication_date", None),
+                    "total_pages": metadata.get("total_pages", None),
+                    "rating": metadata.get("rating", None),
+                    "target_price": metadata.get("target_price", None),
+                    "similarity_score": result.get("similarity_score", 0.0),
+                }
+                citations.append(citation)
+
+            state["citations"] = citations
+
             thought = AgentThought(
-                agent_name="summarizer",
-                thought="No relevant documents found for summarization",
+                agent_name="rag_agent",
+                thought=(
+                    f"Retrieved {len(search_results)} relevant chunks "
+                    "with comprehensive metadata"
+                ),
+                tool_used="search_documents",
+                tool_output=(
+                    f"Retrieved {len(search_results)} chunks with "
+                    "citations and metadata"
+                ),
             )
             state["agent_thoughts"].append(thought)
-            return state
 
-        # Combine top results
+            logger.info(f"RAG Agent: Retrieved {len(search_results)} chunks")
+
+        except Exception as e:
+            logger.error(f"RAG agent error: {e}")
+            thought = AgentThought(
+                agent_name="rag_agent",
+                thought=f"Error during RAG retrieval: {str(e)}",
+            )
+            state["agent_thoughts"].append(thought)
+
+        return state
+
+    async def _execute_tasks_agent(self, state: AgentState) -> AgentState:
+        """
+        Execute decomposed tasks dynamically.
+
+        Iterates through tasks and executes them based on their type,
+        collecting results and handling errors gracefully.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current state with tasks to execute.
+
+        Returns
+        -------
+        AgentState
+            Updated state with task_results populated.
+        """
+        task_results = {}
+
+        for task in state["tasks"]:
+            # Skip synthesis task here (handled in synthesize agent)
+            if task["type"] == TaskType.SYNTHESIS:
+                continue
+
+            # Skip RAG_FETCH task (already done in rag_agent)
+            if task["type"] == TaskType.RAG_FETCH:
+                continue
+
+            task_id = task["id"]
+            task["status"] = "in_progress"
+
+            try:
+                if task["type"] == TaskType.SUMMARIZE:
+                    thought = AgentThought(
+                        agent_name="task_executor",
+                        thought=(
+                            "Executing SUMMARIZE task - "
+                            "Analyzing documents for key findings"
+                        ),
+                        tool_used="summarize_documents",
+                    )
+                    state["agent_thoughts"].append(thought)
+                    logger.info(f"Executing SUMMARIZE task: {task_id}")
+
+                    result = await self._execute_summarize_task(state, task)
+                    task_results[task_id] = result
+                    state["summary"] = result.get("summary")
+                    task["status"] = "completed"
+
+                elif task["type"] == TaskType.EXTRACT_FINANCIAL:
+                    thought = AgentThought(
+                        agent_name="task_executor",
+                        thought=(
+                            "Executing EXTRACT_FINANCIAL task - "
+                            "Pulling key metrics and valuations"
+                        ),
+                        tool_used="extract_financial_data",
+                    )
+                    state["agent_thoughts"].append(thought)
+                    logger.info(f"Executing EXTRACT_FINANCIAL task: {task_id}")
+
+                    result = await self._execute_financial_extraction_task(
+                        state, task
+                    )
+                    task_results[task_id] = result
+                    state["financial_data"] = result.get("metrics", [])
+                    task["status"] = "completed"
+
+                elif task["type"] == TaskType.COMPARE:
+                    thought = AgentThought(
+                        agent_name="task_executor",
+                        thought=(
+                            "Executing COMPARE task - "
+                            "Comparing external vs internal views"
+                        ),
+                        tool_used="compare_analyses",
+                    )
+                    state["agent_thoughts"].append(thought)
+                    logger.info(f"Executing COMPARE task: {task_id}")
+
+                    result = await self._execute_comparison_task(state, task)
+                    task_results[task_id] = result
+                    state["comparison_result"] = result.get("comparison")
+                    task["status"] = "completed"
+
+                elif task["type"] == TaskType.ANALYZE:
+                    thought = AgentThought(
+                        agent_name="task_executor",
+                        thought=(
+                            "Executing ANALYZE task - "
+                            "Performing general analysis"
+                        ),
+                        tool_used="analyze_content",
+                    )
+                    state["agent_thoughts"].append(thought)
+                    logger.info(f"Executing ANALYZE task: {task_id}")
+
+                    result = await self._execute_analysis_task(state, task)
+                    task_results[task_id] = result
+                    task["status"] = "completed"
+
+            except Exception as e:
+                logger.error(f"Error executing task {task_id}: {e}")
+                task["status"] = "failed"
+                task["error"] = str(e)
+                task_results[task_id] = {"error": str(e)}
+
+                thought = AgentThought(
+                    agent_name="task_executor",
+                    thought=f"Error executing {task['type'].value}: {str(e)}",
+                )
+                state["agent_thoughts"].append(thought)
+
+        state["task_results"] = task_results
+        return state
+
+    async def _execute_summarize_task(
+        self, state: AgentState, task: Task
+    ) -> Dict[str, Any]:
+        """Execute summarization task"""
+        if not state["search_results"]:
+            return {"summary": "", "error": "No search results"}
+
         combined_content = "\n\n".join(
-            [result["content"] for result in search_results[:2]]
+            [result["content"] for result in state["search_results"][:2]]
         )
 
-        # Create summarization prompt
         summary_prompt = f"""
         You are a financial research analyst. Summarize the key findings,
         recommendations, and investment thesis from this research report.
@@ -311,8 +576,7 @@ class SmartAgentOrchestrator:
         Research Content:
         {combined_content}
 
-        Provide a comprehensive summary that would help investors understand
-        the key takeaways from this research.
+        Provide a comprehensive summary.
         """
 
         try:
@@ -327,67 +591,29 @@ class SmartAgentOrchestrator:
             response = await asyncio.to_thread(self.llm.invoke, messages)
             summary = response.content
 
-            state["summary"] = summary
-
-            summary_tool = self.tools.get_tool("summarize_content")
-            if summary_tool:
-                tool_name = summary_tool.definition.name
-            else:
-                tool_name = "summarize_content"
-
             thought = AgentThought(
                 agent_name="summarizer",
                 thought="Successfully summarized document(s)",
-                tool_used=tool_name,
+                tool_used="summarize_content",
                 tool_output=f"Generated {len(summary)} character summary",
             )
             state["agent_thoughts"].append(thought)
 
+            return {"summary": summary}
+
         except Exception as e:
             logger.error(f"Summarization error: {e}")
-            thought = AgentThought(
-                agent_name="summarizer",
-                thought=f"Error during summarization: {str(e)}",
-            )
-            state["agent_thoughts"].append(thought)
+            return {"summary": "", "error": str(e)}
 
-        return state
+    async def _execute_financial_extraction_task(
+        self, state: AgentState, task: Task
+    ) -> Dict[str, Any]:
+        """Execute financial extraction task"""
+        if not state["search_results"]:
+            return {"metrics": [], "error": "No search results"}
 
-    async def _extract_financial_agent(self, state: AgentState) -> AgentState:
-        """
-        Extract financial metrics and data from documents.
-
-        Identifies and extracts key financial statements, metrics,
-        valuation data, and relevant numbers from research documents.
-
-        Parameters
-        ----------
-        state : AgentState
-            Current state with query and search results.
-
-        Returns
-        -------
-        AgentState
-            Updated state with financial_data extracted.
-        """
-        query = state["query"]
-
-        # Search for relevant documents
-        search_results = await self.db.search_documents(query, n_results=5)
-
-        if not search_results:
-            thought = AgentThought(
-                agent_name="financial_extractor",
-                thought="No relevant documents found for extraction",
-            )
-            state["agent_thoughts"].append(thought)
-            return state
-
-        state["search_results"] = search_results
-
-        # Extract financial statements
         combined_content = "\n\n".join(
-            [result["content"] for result in search_results[:3]]
+            [result["content"] for result in state["search_results"][:3]]
         )
 
         extraction_prompt = f"""
@@ -403,32 +629,22 @@ class SmartAgentOrchestrator:
         6. Price targets and return expectations
         7. Key assumptions
 
-        Format the output as a structured list of key metrics with their values.
+        Format the output as a structured list of key metrics.
 
         Research Content:
         {combined_content}
-
-        Provide extracted financial data in a clear, structured format.
         """
 
         try:
             messages = [
                 SystemMessage(
-                    content="You are a financial data extraction "
-                    "specialist."
+                    content="You are a financial data extraction specialist."
                 ),
                 HumanMessage(content=extraction_prompt),
             ]
 
             response = await asyncio.to_thread(self.llm.invoke, messages)
             financial_data_text = response.content
-
-            state["financial_data"] = [
-                {
-                    "type": "extracted_metrics",
-                    "content": financial_data_text,
-                }
-            ]
 
             thought = AgentThought(
                 agent_name="financial_extractor",
@@ -438,50 +654,28 @@ class SmartAgentOrchestrator:
             )
             state["agent_thoughts"].append(thought)
 
+            return {
+                "metrics": [
+                    {
+                        "type": "extracted_metrics",
+                        "content": financial_data_text,
+                    }
+                ]
+            }
+
         except Exception as e:
             logger.error(f"Financial extraction error: {e}")
-            thought = AgentThought(
-                agent_name="financial_extractor",
-                thought=f"Error during extraction: {str(e)}",
-            )
-            state["agent_thoughts"].append(thought)
+            return {"metrics": [], "error": str(e)}
 
-        return state
-
-    async def _compare_agent(self, state: AgentState) -> AgentState:
-        """
-        Compare external analysis with internal views.
-
-        Analyzes differences between external research recommendations
-        and internal portfolio positions/views.
-
-        Parameters
-        ----------
-        state : AgentState
-            Current state with query and external analysis.
-
-        Returns
-        -------
-        AgentState
-            Updated state with comparison results.
-        """
-        query = state["query"]
-
-        # Get external analysis
-        search_results = await self.db.search_documents(query, n_results=3)
-
-        if not search_results:
-            thought = AgentThought(
-                agent_name="comparator",
-                thought="No relevant documents found for comparison",
-            )
-            state["agent_thoughts"].append(thought)
-            return state
-
-        state["search_results"] = search_results
+    async def _execute_comparison_task(
+        self, state: AgentState, task: Task
+    ) -> Dict[str, Any]:
+        """Execute comparison task"""
+        if not state["search_results"]:
+            return {"comparison": "", "error": "No search results"}
 
         external_content = "\n\n".join(
-            [result["content"] for result in search_results[:2]]
+            [result["content"] for result in state["search_results"][:2]]
         )
 
         # Mock internal view
@@ -495,8 +689,7 @@ class SmartAgentOrchestrator:
         """
 
         comparison_prompt = f"""
-        Compare the external research recommendations with our internal
-        views.
+        Compare the external research recommendations with our internal views.
 
         EXTERNAL RESEARCH:
         {external_content}
@@ -505,10 +698,10 @@ class SmartAgentOrchestrator:
         {internal_view}
 
         Provide:
-        1. Areas of agreement between external and internal views
+        1. Areas of agreement
         2. Key differences and divergences
-        3. Risk factors each view emphasizes
-        4. Recommended action based on both perspectives
+        3. Risk factors each emphasizes
+        4. Recommended action
         """
 
         try:
@@ -521,9 +714,7 @@ class SmartAgentOrchestrator:
             ]
 
             response = await asyncio.to_thread(self.llm.invoke, messages)
-            comparison_result = response.content
-
-            state["final_response"] = comparison_result
+            comparison = response.content
 
             thought = AgentThought(
                 agent_name="comparator",
@@ -532,42 +723,71 @@ class SmartAgentOrchestrator:
             )
             state["agent_thoughts"].append(thought)
 
-            return state
+            return {"comparison": comparison}
 
         except Exception as e:
             logger.error(f"Comparison error: {e}")
-            thought = AgentThought(
-                agent_name="comparator",
-                thought=f"Error during comparison: {str(e)}",
-            )
-            state["agent_thoughts"].append(thought)
-            return state
+            return {"comparison": "", "error": str(e)}
+
+    async def _execute_analysis_task(
+        self, state: AgentState, task: Task
+    ) -> Dict[str, Any]:
+        """Execute general analysis task"""
+        if not state["search_results"]:
+            return {"analysis": "", "error": "No search results"}
+
+        content = "\n\n".join(
+            [result["content"] for result in state["search_results"][:3]]
+        )
+
+        analysis_prompt = f"""
+        Provide comprehensive analysis based on this research.
+
+        Research Content:
+        {content}
+
+        Provide detailed insights and analysis.
+        """
+
+        try:
+            messages = [
+                SystemMessage(
+                    content="You are a financial analyst providing insights."
+                ),
+                HumanMessage(content=analysis_prompt),
+            ]
+
+            response = await asyncio.to_thread(self.llm.invoke, messages)
+            analysis = response.content
+
+            return {"analysis": analysis}
+
+        except Exception as e:
+            logger.error(f"Analysis error: {e}")
+            return {"analysis": "", "error": str(e)}
 
     async def _synthesize_agent(self, state: AgentState) -> AgentState:
         """
-        Generate final synthesized response.
+        Generate final synthesized response with source citations.
 
-        Combines results from all preceding agents (summary, financial
-        data, comparisons) into a coherent final response to the user.
+        Combines results from all executed tasks into a coherent final
+        response, including source citations for validation and traceability.
 
         Parameters
         ----------
         state : AgentState
-            Current state with all collected analysis.
+            Current state with all collected analysis and citations.
 
         Returns
         -------
         AgentState
-            Updated state with final_response generated.
+            Updated state with final_response and formatted citations.
         """
         query = state["query"]
         summary = state.get("summary")
         financial_data = state.get("financial_data", [])
+        comparison_result = state.get("comparison_result")
         search_results = state.get("search_results", [])
-
-        # If already generated by comparison agent, use that
-        if state.get("final_response"):
-            return state
 
         context_parts = []
 
@@ -576,35 +796,40 @@ class SmartAgentOrchestrator:
 
         if financial_data:
             context_parts.append(
-                f"FINANCIAL DATA:\n" f"{json.dumps(financial_data, indent=2)}"
+                f"FINANCIAL DATA:\n{json.dumps(financial_data, indent=2)}"
             )
+
+        if comparison_result:
+            context_parts.append(f"COMPARISON ANALYSIS:\n{comparison_result}")
 
         if search_results:
             context_parts.append(
-                f"RELEVANT EXCERPTS:\n"
-                f"{search_results[0]['content'][:500]}..."
+                f"KEY EXCERPTS:\n{search_results[0]['content'][:300]}..."
             )
 
         context = "\n\n".join(context_parts)
 
         synthesis_prompt = f"""
-        Based on the analysis below, provide a concise answer to the user's
-        query.
+        Based on the analysis below, provide a concise, actionable answer to
+        the user's query.
 
         USER QUERY: {query}
 
         ANALYSIS:
         {context}
 
-        Provide a clear, actionable answer that addresses the user's question.
-        Include specific data points and recommendations where applicable.
+        Provide a clear, direct answer that:
+        1. Addresses the specific question
+        2. Includes specific data points and metrics where relevant
+        3. Provides recommendations
+        4. Acknowledges any limitations or uncertainties
         """
 
         try:
             messages = [
                 SystemMessage(
                     content="You are a financial analyst providing "
-                    "expert insights."
+                    "expert insights based on research."
                 ),
                 HumanMessage(content=synthesis_prompt),
             ]
@@ -616,7 +841,7 @@ class SmartAgentOrchestrator:
 
             thought = AgentThought(
                 agent_name="synthesizer",
-                thought="Generated final response",
+                thought="Generated final response with source citations",
                 tool_used="synthesize_response",
             )
             state["agent_thoughts"].append(thought)
@@ -645,11 +870,10 @@ class SmartAgentOrchestrator:
 
     async def process_query(self, query: str) -> Dict[str, Any]:
         """
-        Process a query through the multi-agent orchestration graph.
+        Process a query through the dynamic multi-agent orchestration graph.
 
-        Routes the query through specialized agents for analysis,
-        summarization, financial extraction, and synthesis. Returns
-        complete results with agent reasoning steps.
+        Routes the query through task decomposition, RAG retrieval, task
+        execution, and synthesis. Returns complete results with citations.
 
         Parameters
         ----------
@@ -662,16 +886,20 @@ class SmartAgentOrchestrator:
             Dictionary containing:
                 - response: Final synthesized answer
                 - agent_thoughts: List of agent reasoning steps
+                - citations: Source citations with metadata
                 - search_results: Relevant document chunks
-                - recommendations: Investment recommendations
+                - task_results: Results from executed tasks
         """
         # Initialize state
         initial_state: AgentState = {
             "query": query,
-            "query_type": "analysis",
+            "tasks": [],
+            "task_results": {},
             "search_results": [],
+            "citations": [],
             "summary": None,
             "financial_data": [],
+            "comparison_result": None,
             "agent_thoughts": [],
             "final_response": "",
         }
@@ -683,7 +911,9 @@ class SmartAgentOrchestrator:
             return {
                 "response": final_state["final_response"],
                 "agent_thoughts": final_state["agent_thoughts"],
+                "citations": final_state["citations"],
                 "search_results": final_state["search_results"],
+                "task_results": final_state["task_results"],
                 "recommendations": [],
             }
 
@@ -692,7 +922,9 @@ class SmartAgentOrchestrator:
             return {
                 "response": f"Error processing query: {str(e)}",
                 "agent_thoughts": [],
+                "citations": [],
                 "search_results": [],
+                "task_results": {},
                 "recommendations": [],
             }
 
@@ -700,10 +932,11 @@ class SmartAgentOrchestrator:
         self, query: str
     ) -> AsyncGenerator[StreamEvent, None]:
         """
-        Stream query processing with real-time agent thoughts.
+        Stream query processing with real-time agent thoughts and citations.
 
-        Processes query through agents while yielding events for each
-        agent action, allowing real-time progress feedback to UI.
+        Processes query through agents while yielding events for task
+        decomposition, RAG retrieval, task execution, and synthesis,
+        allowing real-time progress feedback to UI.
 
         Parameters
         ----------
@@ -713,73 +946,72 @@ class SmartAgentOrchestrator:
         Yields
         ------
         StreamEvent
-            Event objects containing agent thoughts, actions, and
-            intermediate results.
+            Event objects containing agent thoughts, citations,
+            search results, and final response.
         """
         initial_state: AgentState = {
             "query": query,
-            "query_type": "analysis",
+            "tasks": [],
+            "task_results": {},
             "search_results": [],
+            "citations": [],
             "summary": None,
             "financial_data": [],
+            "comparison_result": None,
             "agent_thoughts": [],
             "final_response": "",
         }
 
         try:
-            # Route agent
-            state = await self._route_agent(initial_state)
-            for thought in state["agent_thoughts"]:
+            # Track number of thoughts to detect new ones
+            last_thought_count = 0
+
+            # Plan and decompose tasks
+            state = await asyncio.to_thread(
+                self._planning_agent, initial_state
+            )
+            new_thoughts = state["agent_thoughts"][last_thought_count:]
+            for thought in new_thoughts:
                 yield StreamEvent(
                     event_type="agent_thought",
                     data=thought.dict(),
                 )
+            last_thought_count = len(state["agent_thoughts"])
 
-            # Process based on query type
-            query_type = state.get("query_type", "analysis")
-
-            if query_type == "comparison":
-                state = await self._compare_agent(state)
-                for thought in state["agent_thoughts"][1:]:
-                    yield StreamEvent(
-                        event_type="agent_thought",
-                        data=thought.dict(),
-                    )
-            elif query_type == "lookup":
-                state = await self._extract_financial_agent(state)
-                for thought in state["agent_thoughts"][1:]:
-                    yield StreamEvent(
-                        event_type="agent_thought",
-                        data=thought.dict(),
-                    )
-            else:
-                # Analysis flow
-                state = await self._summarize_agent(state)
-                for thought in state["agent_thoughts"][1:]:
-                    yield StreamEvent(
-                        event_type="agent_thought",
-                        data=thought.dict(),
-                    )
-
-                state = await self._extract_financial_agent(state)
-                new_thoughts = state["agent_thoughts"][
-                    len([t for t in initial_state["agent_thoughts"]]) :
-                ]
-                for thought in new_thoughts:
-                    yield StreamEvent(
-                        event_type="agent_thought",
-                        data=thought.dict(),
-                    )
-
-            # Synthesize if not already done
-            if not state.get("final_response"):
-                state = await self._synthesize_agent(state)
+            # Fetch RAG
+            state = await self._rag_agent(state)
+            new_thoughts = state["agent_thoughts"][last_thought_count:]
+            for thought in new_thoughts:
                 yield StreamEvent(
                     event_type="agent_thought",
-                    data={
-                        "agent": "synthesizer",
-                        "thought": "Generated final response",
-                    },
+                    data=thought.dict(),
+                )
+            last_thought_count = len(state["agent_thoughts"])
+
+            # Yield citations
+            for citation in state["citations"]:
+                yield StreamEvent(
+                    event_type="citation",
+                    data=citation,
+                )
+
+            # Execute tasks
+            state = await self._execute_tasks_agent(state)
+            new_thoughts = state["agent_thoughts"][last_thought_count:]
+            for thought in new_thoughts:
+                yield StreamEvent(
+                    event_type="agent_thought",
+                    data=thought.dict(),
+                )
+            last_thought_count = len(state["agent_thoughts"])
+
+            # Synthesize
+            state = await self._synthesize_agent(state)
+            new_thoughts = state["agent_thoughts"][last_thought_count:]
+            for thought in new_thoughts:
+                yield StreamEvent(
+                    event_type="agent_thought",
+                    data=thought.dict(),
                 )
 
             # Yield search results
