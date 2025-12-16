@@ -14,7 +14,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const sourceType = 'external'; // Default to external
+  const [sourceType, setSourceType] = useState<
+    'external' | 'internal'
+  >('external');
   const [uploadedFiles, setUploadedFiles] = useState<any[]>(
     []
   );
@@ -155,6 +157,31 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             ✗ {uploadError}
           </div>
         )}
+
+        <div className="source-selector">
+          <label>
+            <input
+              type="radio"
+              value="external"
+              checked={sourceType === 'external'}
+              onChange={(e) =>
+                setSourceType(e.target.value as any)
+              }
+            />
+            External Reports
+          </label>
+          <label>
+            <input
+              type="radio"
+              value="internal"
+              checked={sourceType === 'internal'}
+              onChange={(e) =>
+                setSourceType(e.target.value as any)
+              }
+            />
+            Internal Analysis
+          </label>
+        </div>
 
         <div className="upload-area">
           <button
