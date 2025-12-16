@@ -23,15 +23,20 @@ class DocumentProcessor:
         openai_model: str = None,
         temperature: float = None,
     ):
-        """
-        Initialize document processor
+        """Initialize document processor
 
-        Args:
-            chunk_size: Size of each chunk in characters
-            chunk_overlap: Overlap between chunks in characters
-            openai_api_key: OpenAI API key for LLM
-            openai_model: OpenAI model to use for summarization
-            temperature: Temperature for LLM responses
+        Parameters
+        ----------
+        chunk_size : int, optional
+            Size of each chunk in characters
+        chunk_overlap : int, optional
+            Overlap between chunks in characters
+        openai_api_key : str, optional
+            OpenAI API key for LLM
+        openai_model : str, optional
+            OpenAI model to use for summarization
+        temperature : float, optional
+            Temperature for LLM responses
         """
         self.chunk_size = chunk_size or settings.chunk_size
         self.chunk_overlap = chunk_overlap or settings.chunk_overlap
@@ -58,17 +63,19 @@ class DocumentProcessor:
     async def process_pdf(
         self, file_content: bytes, filename: str
     ) -> List[Dict[str, Any]]:
-        """
-        Extract text from PDF, create semantic chunks,
-        summarize each, and extract vital information
+        """Process PDF: extract text, create chunks, summarize
 
-        Args:
-            file_content: Raw PDF file content (bytes)
-            filename: Original filename
+        Parameters
+        ----------
+        file_content : bytes
+            Raw PDF file content (bytes)
+        filename : str
+            Original filename
 
-        Returns:
-            List of chunks with metadata, summaries, and
-            extracted information
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of chunks with metadata, summaries, and extracted information
         """
         try:
             # Extract text from PDF
@@ -135,14 +142,18 @@ class DocumentProcessor:
     async def _create_semantic_chunks(
         self, text: str, max_chunks: int = 5
     ) -> List[str]:
-        """
-        Create semantic chunks using paragraph detection
+        """Create semantic chunks using paragraph detection
 
-        Args:
-            text: Full document text
-            max_chunks: Maximum number of chunks to create
+        Parameters
+        ----------
+        text : str
+            Full document text
+        max_chunks : int, optional
+            Maximum number of chunks to create, by default 5
 
-        Returns:
+        Returns
+        -------
+        List[str]
             List of semantic chunks
         """
         # Split by paragraphs (double newline)
@@ -184,13 +195,16 @@ class DocumentProcessor:
         return chunks
 
     async def _summarize_chunk(self, chunk: str) -> str:
-        """
-        Summarize a single chunk using LLM
+        """Summarize a single chunk using LLM
 
-        Args:
-            chunk: Text chunk to summarize
+        Parameters
+        ----------
+        chunk : str
+            Text chunk to summarize
 
-        Returns:
+        Returns
+        -------
+        str
             Summary of the chunk
         """
         if not self.llm:
@@ -216,21 +230,19 @@ class DocumentProcessor:
     async def _extract_vital_info(
         self, chunk: str, summary: str
     ) -> Dict[str, Any]:
-        """
-        Extract vital investment information from chunk
+        """Extract vital investment information from chunk
 
-        Args:
-            chunk: Original text chunk
-            summary: Chunk summary
+        Parameters
+        ----------
+        chunk : str
+            Original text chunk
+        summary : str
+            Chunk summary
 
-        Returns:
-            Dictionary with extracted info:
-            {
-                "sectors": [...],
-                "recommendations": [...],
-                "metrics": {...},
-                "risks": [...]
-            }
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary with extracted info: sectors, recommendations, metrics, risks
         """
         if not self.llm:
             return {}
@@ -261,13 +273,16 @@ class DocumentProcessor:
             return {}
 
     async def _summarize_document(self, chunk_summaries: List[str]) -> str:
-        """
-        Create a document-level summary from chunk summaries
+        """Create a document-level summary from chunk summaries
 
-        Args:
-            chunk_summaries: List of individual chunk summaries
+        Parameters
+        ----------
+        chunk_summaries : List[str]
+            List of individual chunk summaries
 
-        Returns:
+        Returns
+        -------
+        str
             Document-level summary
         """
         if not self.llm or not chunk_summaries:
@@ -293,13 +308,16 @@ class DocumentProcessor:
             return ""
 
     async def _extract_text_from_pdf(self, file_content: bytes) -> str:
-        """
-        Extract text from PDF content
+        """Extract text from PDF content
 
-        Args:
-            file_content: Raw PDF bytes
+        Parameters
+        ----------
+        file_content : bytes
+            Raw PDF bytes
 
-        Returns:
+        Returns
+        -------
+        str
             Extracted text
         """
         try:
@@ -318,13 +336,16 @@ class DocumentProcessor:
             raise
 
     def _create_chunks(self, text: str) -> List[str]:
-        """
-        Split text into overlapping chunks
+        """Split text into overlapping chunks
 
-        Args:
-            text: Full text to chunk
+        Parameters
+        ----------
+        text : str
+            Full text to chunk
 
-        Returns:
+        Returns
+        -------
+        List[str]
             List of text chunks
         """
         chunks = []
@@ -351,14 +372,18 @@ class DocumentProcessor:
         return chunks
 
     def _estimate_page_range(self, chunk: str, full_text: str) -> str:
-        """
-        Estimate page range for a chunk
+        """Estimate page range for a chunk
 
-        Args:
-            chunk: The text chunk
-            full_text: Full document text with page markers
+        Parameters
+        ----------
+        chunk : str
+            The text chunk
+        full_text : str
+            Full document text with page markers
 
-        Returns:
+        Returns
+        -------
+        str
             Estimated page range
         """
         try:
@@ -381,14 +406,18 @@ class DocumentProcessor:
     async def process_text_file(
         self, content: str, filename: str
     ) -> List[Dict[str, Any]]:
-        """
-        Process plain text file
+        """Process plain text file
 
-        Args:
-            content: Text file content
-            filename: Original filename
+        Parameters
+        ----------
+        content : str
+            Text file content
+        filename : str
+            Original filename
 
-        Returns:
+        Returns
+        -------
+        List[Dict[str, Any]]
             List of chunks with metadata
         """
         try:
