@@ -467,32 +467,216 @@
   padding-left: 10px;
 }
 
+/* Source Attribution Card */
 .chunk-item {
-  background: #f0f9ff;
-  border-left: 3px solid #0ea5e9;
-  border-radius: 4px;
-  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: box-shadow 0.2s ease;
 }
 
+.chunk-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.source-attribution {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.source-info {
+  flex: 1;
+}
+
+.source-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+  padding: 0;
+  word-break: break-word;
+}
+
+.source-relevance {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 2px 0 0 0;
+  padding: 0;
+}
+
+/* Metadata Row - Inline display */
+.metadata-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.metadata-item {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.metadata-label {
+  font-weight: 600;
+  color: #6b7280;
+}
+
+/* Source Description with tags */
+.source-description {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.description-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Small Tags */
+.tag-small {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #f3f4f6;
+  color: #374151;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tag-small.rating-buy {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.tag-small.rating-hold {
+  background: #fef08a;
+  color: #78350f;
+}
+
+.tag-small.rating-sell {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+/* Keep old styles for backward compatibility if needed */
 .chunk-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
   gap: 8px;
 }
 
+.chunk-title-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
 .chunk-number {
-  font-size: 12px;
+  font-size: 13px;
   color: #0369a1;
+  font-weight: 600;
+}
+
+.chunk-metadata-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  align-items: center;
+}
+
+.metadata-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid;
+}
+
+.company-tag {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+
+.report-tag {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #ddd6fe;
+}
+
+.date-tag {
+  background: #fef3c7;
+  color: #7c2d12;
+  border-color: #fde68a;
+}
+
+.analyst-tag {
+  background: #f0fdf4;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.rating-tag {
+  background: #fecaca;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.rating-tag.rating-buy {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.rating-tag.rating-hold {
+  background: #fef08a;
+  color: #78350f;
+  border-color: #fde047;
+}
+
+.rating-tag.rating-sell {
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-color: #fecaca;
+}
+
+.price-tag {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
 }
 
 .chunk-preview {
   font-size: 12px;
   color: #4b5563;
-  line-height: 1.3;
-  margin: 0;
+  line-height: 1.4;
+  margin: 8px 0 0 0;
+  padding: 0;
+  display: none;
 }
 
 .result-header {
