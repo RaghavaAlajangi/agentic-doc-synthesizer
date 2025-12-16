@@ -457,45 +457,6 @@ export const Chat: React.FC = () => {
                   </details>
                 )}
 
-              {message.agentThoughts &&
-                message.agentThoughts.length > 0 &&
-                !message.isStreaming && (
-                  <details className="agent-thoughts">
-                    <summary className="thoughts-summary">
-                      🤖 Agent Decision Steps (
-                      {message.agentThoughts.length})
-                    </summary>
-                    <div className="thoughts-list">
-                      {message.agentThoughts.map(
-                        (thought, idx) => (
-                          <div
-                            key={idx}
-                            className="thought-item"
-                          >
-                            <div className="thought-header">
-                              <strong>
-                                {thought.agent}
-                              </strong>
-                              <span className="step-number">
-                                #{idx + 1}
-                              </span>
-                            </div>
-                            <p className="thought-text">
-                              {thought.thought}
-                            </p>
-                            {thought.tool_used && (
-                              <small className="tool-info">
-                                🔧 Tool:{' '}
-                                {thought.tool_used}
-                              </small>
-                            )}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </details>
-                )}
-
               {message.isStreaming && (
                 <div className="streaming-indicator">
                   <span className="dot"></span>
