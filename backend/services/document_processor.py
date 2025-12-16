@@ -116,8 +116,7 @@ class DocumentProcessor:
                     for c in chunks_with_metadata
                 ]
                 doc_summary = await self._summarize_document(summaries)
-                # Store at document level (can be returned
-                # separately)
+                # Store at document level (can be returned separately)
                 logger.info(
                     f"Document-level summary created " f"for {filename}"
                 )
@@ -200,7 +199,7 @@ class DocumentProcessor:
         try:
             system_prompt = (
                 "You are a financial analyst. "
-                "Summarize the provided text in 2-3 sentences, "
+                "Summarize the provided text in 3-4 sentences, "
                 "focusing on key investment insights, "
                 "recommendations, or financial metrics."
             )
@@ -413,5 +412,4 @@ class DocumentProcessor:
 
         except Exception as e:
             logger.error(f"Error processing text file {filename}: {e}")
-            raise
             raise
