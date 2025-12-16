@@ -378,31 +378,92 @@ export const Chat: React.FC = () => {
                               </summary>
                               <div className="chunks-list">
                                 {chunks.map(
-                                  (chunk, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="chunk-item"
-                                    >
-                                      <div className="chunk-header">
-                                        <span className="chunk-number">
-                                          Chunk{' '}
-                                          {idx + 1}
-                                        </span>
-                                        <span className="similarity">
-                                          {(
-                                            chunk.similarity *
-                                              100
-                                          ).toFixed(
-                                            1
+                                  (chunk, idx) => {
+                                    // Extract metadata from chunk
+                                    const metadata = chunk.metadata || {};
+                                    const chunk_metadata = chunk.chunk_metadata || metadata;
+                                    
+                                    // Basic metadata
+                                    const page = metadata.page || chunk.page_number || '';
+                                    const section = metadata.section || chunk.section || '';
+                                    
+                                    // Enhanced metadata
+                                    const company = chunk_metadata.company_name || metadata.company_name || '';
+                                    const reportType = chunk_metadata.report_type || metadata.report_type || '';
+                                    const reportDate = chunk_metadata.report_date || metadata.report_date || '';
+                                    const analyst = chunk_metadata.author_analyst || metadata.author_analyst || '';
+                                    const rating = chunk_metadata.rating || metadata.rating || '';
+                                    const targetPrice = chunk_metadata.target_price || metadata.target_price || '';
+                                    
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="chunk-item"
+                                      >
+                                        {/* Source Attribution Card */}
+                                        <div className="source-attribution">
+                                          {/* Source Title and Relevance */}
+                                          <div className="source-header">
+                                            <div className="source-info">
+                                              <h4 className="source-title">
+                                                {chunk_metadata.document_name || metadata.source || 'Unknown Document'}
+                                              </h4>
+                                              <p className="source-relevance">
+                                                Relevance: {(
+                                                  chunk.similarity_score ?
+                                                    chunk.similarity_score * 100 :
+                                                    chunk.similarity * 100
+                                                ).toFixed(1)}%
+                                              </p>
+                                            </div>
+                                          </div>
+
+                                          {/* Metadata Row */}
+                                          <div className="metadata-row">
+                                            {company && (
+                                              <span className="metadata-item">
+                                                <span className="metadata-label">Company:</span> {company}
+                                              </span>
+                                            )}
+                                            {reportDate && (
+                                              <span className="metadata-item">
+                                                <span className="metadata-label">Year:</span> {reportDate}
+                                              </span>
+                                            )}
+                                            {page && (
+                                              <span className="metadata-item">
+                                                <span className="metadata-label">Page:</span> {page}
+                                              </span>
+                                            )}
+                                            {chunk_metadata.author_analyst && (
+                                              <span className="metadata-item">
+                                                <span className="metadata-label">Publisher:</span> {chunk_metadata.author_analyst}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {/* Short Description */}
+                                          {(reportType || rating || targetPrice) && (
+                                            <div className="source-description">
+                                              <div className="description-tags">
+                                                {reportType && (
+                                                  <span className="tag-small">{reportType}</span>
+                                                )}
+                                                {rating && (
+                                                  <span className={`tag-small rating-${rating.toLowerCase()}`}>
+                                                    {rating}
+                                                  </span>
+                                                )}
+                                                {targetPrice && (
+                                                  <span className="tag-small">{targetPrice}</span>
+                                                )}
+                                              </div>
+                                            </div>
                                           )}
-                                          % match
-                                        </span>
+                                        </div>
                                       </div>
-                                      <p className="chunk-preview">
-                                        {chunk.preview}
-                                      </p>
-                                    </div>
-                                  )
+                                    );
+                                  }
                                 )}
                               </div>
                             </details>
