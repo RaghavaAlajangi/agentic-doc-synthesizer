@@ -14,7 +14,7 @@ from models.schemas import (
     DocumentUploadResponse,
     StreamEvent,
 )
-from services.agent_orchestrator import SmartAgentOrchestrator
+from services.agent_orchestrator import AgentOrchestrator
 from services.database import ChromaDBService
 from services.document_processor import DocumentProcessor
 from services.financial_data import FinancialDataService
@@ -42,7 +42,7 @@ app.add_middleware(
 # Initialize services
 db_service: ChromaDBService = None
 doc_processor: DocumentProcessor = None
-orchestrator: SmartAgentOrchestrator = None
+orchestrator: AgentOrchestrator = None
 financial_data_service: FinancialDataService = None
 
 
@@ -78,9 +78,7 @@ async def startup_event():
             openai_model=settings.openai_model,
             temperature=settings.document_processor_temperature,
         )
-        orchestrator = SmartAgentOrchestrator(
-            db_service, financial_data_service
-        )
+        orchestrator = AgentOrchestrator(db_service, financial_data_service)
         logger.info("Services initialized with Smart Orchestrator")
     except Exception as e:
         logger.error(f"Error initializing services: {e}")
