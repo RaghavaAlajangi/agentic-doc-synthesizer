@@ -55,6 +55,43 @@ class ChatRequest(BaseModel):
     )
 
 
+class ChunkMetadata(BaseModel):
+    """Enhanced metadata for document chunks"""
+
+    company_name: Optional[str] = Field(
+        None, description="Name of the company the document is about"
+    )
+    report_type: Optional[str] = Field(
+        None,
+        description="Type of report (e.g., 'Research Report', "
+        "'Earnings Call', 'Investor Presentation')",
+    )
+    report_date: Optional[str] = Field(
+        None,
+        description="Date of the report (e.g., 'Q3 2024', 'January 2024')",
+    )
+    document_type: Optional[str] = Field(
+        None,
+        description="Document classification (e.g., 'equity_research', "
+        "'fixed_income', 'multi_asset')",
+    )
+    author_analyst: Optional[str] = Field(
+        None, description="Author or analyst name"
+    )
+    publication_date: Optional[str] = Field(
+        None, description="Publication or upload date"
+    )
+    total_pages: Optional[int] = Field(
+        None, description="Total number of pages in the document"
+    )
+    rating: Optional[str] = Field(
+        None, description="Rating if applicable (e.g., 'Buy', 'Hold', 'Sell')"
+    )
+    target_price: Optional[str] = Field(
+        None, description="Price target if applicable"
+    )
+
+
 class SearchResult(BaseModel):
     """Represents a search result from vector database"""
 
@@ -65,6 +102,66 @@ class SearchResult(BaseModel):
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Additional metadata like filename, page number, etc.",
+    )
+    preview: Optional[str] = Field(
+        None, description="Preview/snippet of the content"
+    )
+    chunk_metadata: Optional[ChunkMetadata] = Field(
+        None, description="Detailed metadata about the chunk"
+    )
+
+
+class Citation(BaseModel):
+    """Represents a source citation for retrieved information"""
+
+    document_id: str = Field(..., description="ID of the source document")
+    document_name: str = Field(..., description="Name of the source document")
+    page_number: Optional[int] = Field(
+        None, description="Page number in the document, if available"
+    )
+    section: Optional[str] = Field(
+        None, description="Section name in the document, if available"
+    )
+    chunk_index: int = Field(
+        ..., description="Index of the chunk within the document"
+    )
+    content_snippet: str = Field(
+        ..., description="First 200 characters of the content for preview"
+    )
+    chunk_metadata: ChunkMetadata = Field(
+        default_factory=ChunkMetadata,
+        description="Detailed metadata about the chunk",
+    )
+    similarity_score: float = Field(
+        default=0.0,
+        description="Similarity score of the chunk to the query (0-1)",
+    )
+
+
+class DocumentSummary(BaseModel):
+    """Summary of a document with rich metadata"""
+
+    document_id: str = Field(..., description="ID of the document")
+    document_name: str = Field(..., description="Name of the document")
+    summary_text: str = Field(..., description="The summary content")
+    chunk_metadata: ChunkMetadata = Field(
+        default_factory=ChunkMetadata,
+        description="Metadata about the document",
+    )
+    creation_timestamp: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When the summary was created",
+    )
+    extraction_type: str = Field(
+        default="automatic",
+        description="How the summary was extracted (automatic/manual)",
+    )
+    key_points: List[str] = Field(
+        default_factory=list,
+        description="Key points extracted from the document",
+    )
+    confidence_score: float = Field(
+        default=0.8, description="Confidence in the summary (0-1)"
     )
 
 
@@ -94,6 +191,10 @@ class ChatResponse(BaseModel):
     search_results: List[SearchResult] = Field(
         default_factory=list,
         description="Search results used to formulate the response",
+    )
+    citations: List[Citation] = Field(
+        default_factory=list,
+        description="Source citations with metadata for each retrieved chunk",
     )
     recommendations: List[Recommendation] = Field(
         default_factory=list,
@@ -135,8 +236,8 @@ class StreamEvent(BaseModel):
 
     event_type: str = Field(
         ...,
-        description="Type of event: 'agent_thought', 'search_result', "
-        "'recommendation', 'final_response'",
+        description="Type of event: 'agent_thought', 'citation', "
+        "'search_result', 'recommendation', 'final_response'",
     )
     data: Dict[str, Any] = Field(..., description="Event data")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
