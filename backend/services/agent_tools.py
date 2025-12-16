@@ -19,11 +19,16 @@ class ToolDefinition:
     ):
         """Initialize tool definition
 
-        Args:
-            name: Unique tool identifier
-            description: Human-readable description
-            input_schema: Input parameters schema
-            output_schema: Output format schema
+        Parameters
+        ----------
+        name : str
+            Unique tool identifier
+        description : str
+            Human-readable description
+        input_schema : Dict[str, Any]
+            Input parameters schema
+        output_schema : Dict[str, Any]
+            Output format schema
         """
         self.name = name
         self.description = description
@@ -31,7 +36,13 @@ class ToolDefinition:
         self.output_schema = output_schema
 
     def to_dict(self) -> Dict[str, Any]:
-        """Export tool definition as dictionary"""
+        """Export tool definition as dictionary
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary representation of the tool definition
+        """
         return {
             "name": self.name,
             "description": self.description,
@@ -44,7 +55,13 @@ class SearchTool:
     """Tool for searching research documents"""
 
     def __init__(self, db_service):
-        """Initialize with database service"""
+        """Initialize with database service
+
+        Parameters
+        ----------
+        db_service : DatabaseService
+            Database service for document operations
+        """
         self.db = db_service
         self.definition = ToolDefinition(
             name="search_documents",
@@ -96,12 +113,17 @@ class SearchTool:
     async def __call__(self, query: str, n_results: int = 5) -> Dict[str, Any]:
         """Execute search
 
-        Args:
-            query: Search query
-            n_results: Number of results
+        Parameters
+        ----------
+        query : str
+            Search query
+        n_results : int, optional
+            Number of results to return, by default 5
 
-        Returns:
-            Search results
+        Returns
+        -------
+        Dict[str, Any]
+            Search results dictionary containing results list
         """
         try:
             results = await self.db.search_documents(query, n_results)
@@ -116,7 +138,13 @@ class SummarizationTool:
     """Tool for summarizing research content"""
 
     def __init__(self, llm_service):
-        """Initialize with LLM service"""
+        """Initialize with LLM service
+
+        Parameters
+        ----------
+        llm_service : LLMService
+            LLM service for text generation
+        """
         self.llm = llm_service
         self.definition = ToolDefinition(
             name="summarize_content",
@@ -154,11 +182,15 @@ class SummarizationTool:
     async def __call__(self, content: str) -> Dict[str, Any]:
         """Execute summarization
 
-        Args:
-            content: Content to summarize
+        Parameters
+        ----------
+        content : str
+            Content to summarize
 
-        Returns:
-            Summary result
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing summary and key points
         """
         try:
             prompt = (
@@ -197,7 +229,18 @@ class SummarizationTool:
             return {"summary": "", "error": str(e)}
 
     async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously"""
+        """Invoke LLM asynchronously
+
+        Parameters
+        ----------
+        messages : list
+            List of messages to send to LLM
+
+        Returns
+        -------
+        str
+            LLM response content
+        """
         response = await asyncio.to_thread(self.llm.invoke, messages)
         return response.content
 
@@ -206,7 +249,13 @@ class FinancialExtractionTool:
     """Tool for extracting financial metrics and data"""
 
     def __init__(self, llm_service):
-        """Initialize with LLM service"""
+        """Initialize with LLM service
+
+        Parameters
+        ----------
+        llm_service : LLMService
+            LLM service for text generation
+        """
         self.llm = llm_service
         self.definition = ToolDefinition(
             name="extract_financial_data",
@@ -248,11 +297,15 @@ class FinancialExtractionTool:
     async def __call__(self, content: str) -> Dict[str, Any]:
         """Execute financial extraction
 
-        Args:
-            content: Content to extract from
+        Parameters
+        ----------
+        content : str
+            Content to extract financial data from
 
-        Returns:
-            Extracted data
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing extracted metrics, valuations, and targets
         """
         try:
             prompt = (
@@ -291,7 +344,18 @@ class FinancialExtractionTool:
             return {"metrics": {}, "error": str(e)}
 
     async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously"""
+        """Invoke LLM asynchronously
+
+        Parameters
+        ----------
+        messages : list
+            List of messages to send to LLM
+
+        Returns
+        -------
+        str
+            LLM response content
+        """
         response = await asyncio.to_thread(self.llm.invoke, messages)
         return response.content
 
@@ -300,7 +364,13 @@ class ComparisonTool:
     """Tool for comparing external and internal analysis"""
 
     def __init__(self, llm_service):
-        """Initialize with LLM service"""
+        """Initialize with LLM service
+
+        Parameters
+        ----------
+        llm_service : LLMService
+            LLM service for text generation
+        """
         self.llm = llm_service
         self.definition = ToolDefinition(
             name="compare_analyses",
@@ -346,12 +416,17 @@ class ComparisonTool:
     async def __call__(self, external: str, internal: str) -> Dict[str, Any]:
         """Execute comparison
 
-        Args:
-            external: External analysis
-            internal: Internal view
+        Parameters
+        ----------
+        external : str
+            External research analysis
+        internal : str
+            Internal investment view
 
-        Returns:
-            Comparison result
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing comparison, agreements, and disagreements
         """
         try:
             prompt = (
@@ -386,7 +461,18 @@ class ComparisonTool:
             return {"comparison": "", "error": str(e)}
 
     async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously"""
+        """Invoke LLM asynchronously
+
+        Parameters
+        ----------
+        messages : list
+            List of messages to send to LLM
+
+        Returns
+        -------
+        str
+            LLM response content
+        """
         response = await asyncio.to_thread(self.llm.invoke, messages)
         return response.content
 
@@ -395,7 +481,13 @@ class SynthesisTool:
     """Tool for synthesizing final responses"""
 
     def __init__(self, llm_service):
-        """Initialize with LLM service"""
+        """Initialize with LLM service
+
+        Parameters
+        ----------
+        llm_service : LLMService
+            LLM service for text generation
+        """
         self.llm = llm_service
         self.definition = ToolDefinition(
             name="synthesize_response",
@@ -438,12 +530,17 @@ class SynthesisTool:
     ) -> Dict[str, Any]:
         """Execute synthesis
 
-        Args:
-            query: User query
-            context: Collected context
+        Parameters
+        ----------
+        query : str
+            User query
+        context : Dict[str, Any]
+            Collected context information
 
-        Returns:
-            Final response
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing final response
         """
         try:
             context_str = "\n".join([f"{k}: {v}" for k, v in context.items()])
@@ -475,7 +572,18 @@ class SynthesisTool:
             return {"response": "", "error": str(e)}
 
     async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously"""
+        """Invoke LLM asynchronously
+
+        Parameters
+        ----------
+        messages : list
+            List of messages to send to LLM
+
+        Returns
+        -------
+        str
+            LLM response content
+        """
         response = await asyncio.to_thread(self.llm.invoke, messages)
         return response.content
 
@@ -491,10 +599,14 @@ class AgentToolRegistry:
     ):
         """Initialize tool registry
 
-        Args:
-            db_service: Database service
-            financial_data_service: Financial data service
-            llm_service: LLM service (ChatOpenAI instance)
+        Parameters
+        ----------
+        db_service : DatabaseService
+            Database service
+        financial_data_service : FinancialDataService
+            Financial data service
+        llm_service : LLMService
+            LLM service (ChatOpenAI instance)
         """
         # Initialize all tools
         self.search = SearchTool(db_service)
@@ -517,31 +629,64 @@ class AgentToolRegistry:
         )
 
     def get_tool(self, name: str) -> Optional[Any]:
-        """Get tool by name"""
+        """Get tool by name
+
+        Parameters
+        ----------
+        name : str
+            Tool name
+
+        Returns
+        -------
+        Optional[Any]
+            Tool instance if found, None otherwise
+        """
         return self.tools_map.get(name)
 
     def get_all_tools(self) -> Dict[str, Any]:
-        """Get all tools"""
+        """Get all tools
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary mapping tool names to tool instances
+        """
         return self.tools_map
 
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
-        """Get all tool definitions for agent
-        documentation"""
+        """Get all tool definitions for agent documentation
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of tool definition dictionaries
+        """
         return [tool.definition.to_dict() for tool in self.tools_map.values()]
 
     def list_tools(self) -> List[str]:
-        """List all available tool names"""
+        """List all available tool names
+
+        Returns
+        -------
+        List[str]
+            List of available tool names
+        """
         return list(self.tools_map.keys())
 
     async def execute_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
         """Execute a tool by name
 
-        Args:
-            tool_name: Name of the tool
-            **kwargs: Tool arguments
+        Parameters
+        ----------
+        tool_name : str
+            Name of the tool to execute
+        **kwargs
+            Tool arguments
 
-        Returns:
-            Tool result
+        Returns
+        -------
+        Dict[str, Any]
+            Tool result dictionary
         """
         tool = self.get_tool(tool_name)
         if not tool:
