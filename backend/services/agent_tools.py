@@ -1,12 +1,3 @@
-"""Explicit Tool Definitions for Agent System.
-
-This module defines all available tools that agents can use.
-Each tool is a callable with clear inputs, outputs, and documentation.
-
-Tools are organized by category and made available to agents
-through a central registry.
-"""
-
 import asyncio
 import logging
 from typing import Any, Dict, List, Optional
@@ -114,7 +105,7 @@ class SearchTool:
         """
         try:
             results = await self.db.search_documents(query, n_results)
-            logger.info(f"Search tool: Found {len(results)} " f"results")
+            logger.info(f"Search tool: Found {len(results)} results")
             return {"results": results}
         except Exception as e:
             logger.error(f"Search tool error: {e}")
@@ -187,9 +178,7 @@ class SummarizationTool:
             )
 
             messages = [
-                SystemMessage(
-                    content="You are an expert " "financial analyst."
-                ),
+                SystemMessage(content="You are an expert financial analyst."),
                 HumanMessage(content=prompt),
             ]
 
@@ -284,14 +273,13 @@ class FinancialExtractionTool:
 
             messages = [
                 SystemMessage(
-                    content="You are a financial data "
-                    "extraction specialist."
+                    content="You are a financial data extraction specialist."
                 ),
                 HumanMessage(content=prompt),
             ]
 
             response = await self._invoke_llm(messages)
-            logger.info("Financial extraction tool: " "Extracted data")
+            logger.info("Financial extraction tool: Extracted data")
 
             return {
                 "metrics": {"raw_extraction": response},
@@ -380,14 +368,13 @@ class ComparisonTool:
 
             messages = [
                 SystemMessage(
-                    content="You are a portfolio manager "
-                    "comparing analyses."
+                    content="You are a portfolio manager comparing analyses."
                 ),
                 HumanMessage(content=prompt),
             ]
 
             response = await self._invoke_llm(messages)
-            logger.info("Comparison tool: " "Completed comparison")
+            logger.info("Comparison tool: Completed comparison")
 
             return {
                 "comparison": response,
@@ -473,14 +460,14 @@ class SynthesisTool:
 
             messages = [
                 SystemMessage(
-                    content="You are a financial analyst "
-                    "providing expert insights."
+                    content="You are a financial analyst providing expert "
+                    "insights."
                 ),
                 HumanMessage(content=prompt),
             ]
 
             response = await self._invoke_llm(messages)
-            logger.info("Synthesis tool: " "Generated response")
+            logger.info("Synthesis tool: Generated response")
 
             return {"response": response}
         except Exception as e:
@@ -526,7 +513,7 @@ class AgentToolRegistry:
         }
 
         logger.info(
-            f"Tool registry initialized with " f"{len(self.tools_map)} tools"
+            f"Tool registry initialized with {len(self.tools_map)} tools"
         )
 
     def get_tool(self, name: str) -> Optional[Any]:
@@ -558,7 +545,7 @@ class AgentToolRegistry:
         """
         tool = self.get_tool(tool_name)
         if not tool:
-            return {"error": f"Tool '{tool_name}' " f"not found"}
+            return {"error": f"Tool '{tool_name}' not found"}
 
         try:
             result = await tool(**kwargs)
