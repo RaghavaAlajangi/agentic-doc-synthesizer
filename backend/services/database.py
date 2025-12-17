@@ -210,12 +210,14 @@ class ChromaDBService:
         filename: str,
         chunk_id: int,
         metadata: Dict[str, Any] = None,
+        section_summary: str = "",
     ) -> str:
         """
         Store a document chunk with embedding in vector database.
 
         Embeds chunk content and stores with metadata for semantic
-        search.
+        search. Metadata includes section summary for navigation and
+        citations.
 
         Parameters
         ----------
@@ -228,7 +230,9 @@ class ChromaDBService:
         chunk_id : int
             Chunk sequence number.
         metadata : Dict[str, Any], optional
-            Additional metadata to store.
+            Additional metadata to store (page range, section, vital info).
+        section_summary : str, optional
+            Summary of this section for navigation purposes.
 
         Returns
         -------
@@ -241,7 +245,7 @@ class ChromaDBService:
         # Generate unique chunk ID
         chunk_uid = f"{document_id}_chunk_{chunk_id}"
 
-        # Prepare metadata
+        # Prepare metadata with section summary for agent retrieval
         chunk_metadata = {
             "document_id": document_id,
             "filename": filename,
@@ -250,6 +254,10 @@ class ChromaDBService:
         }
         if metadata:
             chunk_metadata.update(metadata)
+
+        # Store section summary in metadata for RAG agents
+        if section_summary:
+            chunk_metadata["section_summary"] = section_summary
 
         try:
             # Compute embedding if model is available
@@ -275,21 +283,89 @@ class ChromaDBService:
                     documents=[content],
                     metadatas=[chunk_metadata],
                 )
-            msg = f"Stored chunk {chunk_uid}"
+            msg = f"Stored chunk {chunk_uid} with section summary"
             logger.info(msg)
             return chunk_uid
         except Exception as e:
             logger.error(f"Error storing chunk: {e}")
             raise
 
+    async def store_document_summary(
+        self, document_id: str, filename: str, summary: str
+    ) -> str:
+        """
+        Store document-level executive summary.
+
+        The document summary is stored as a special document for fast
+        retrieval by agents during RAG phase. This enables agents to
+        get document overview without searching all chunks.
+
+        Parameters
+        ----------
+        document_id : str
+            Unique identifier for the document.
+        filename : str
+            Original filename.
+        summary : str
+            Document-level executive summary.
+
+        Returns
+        -------
+        str
+            Summary document ID.
+        """
+        collection = self.external_collection_instance
+        summary_uid = f"{document_id}_summary"
+
+        summary_metadata = {
+            "document_id": document_id,
+            "filename": filename,
+            "type": "document_summary",
+            "stored_at": datetime.utcnow().isoformat(),
+        }
+
+        try:
+            # Compute embedding for summary
+            embedding = None
+            if self.embedding_model:
+                try:
+                    embedding = self.embedding_model.embed_query(summary)
+                except Exception as e:
+                    logger.warning(f"Failed to compute summary embedding: {e}")
+
+            # Store as special document
+            if embedding:
+                collection.add(
+                    ids=[summary_uid],
+                    documents=[summary],
+                    embeddings=[embedding],
+                    metadatas=[summary_metadata],
+                )
+            else:
+                collection.add(
+                    ids=[summary_uid],
+                    documents=[summary],
+                    metadatas=[summary_metadata],
+                )
+
+            logger.info(f"Stored document summary {summary_uid}")
+            return summary_uid
+        except Exception as e:
+            logger.error(f"Error storing document summary: {e}")
+            raise
+
     async def search_documents(
-        self, query: str, n_results: int = 5
+        self,
+        query: str,
+        n_results: int = 5,
+        filter_type: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for semantically similar documents.
 
         Uses embedding similarity to find relevant documents matching
-        the query.
+        the query. Can optionally filter by document type (e.g., retrieve
+        only document summaries or only chunks).
 
         Parameters
         ----------
@@ -297,6 +373,11 @@ class ChromaDBService:
             Search query text.
         n_results : int, optional
             Number of results to return. Default is 5.
+        filter_type : Optional[str], optional
+            Filter by metadata type. Options:
+            - None (default): All documents
+            - "document_summary": Only document-level summaries
+            - "chunk": Only chunk documents
 
         Returns
         -------
@@ -314,15 +395,25 @@ class ChromaDBService:
             except Exception as e:
                 logger.warning(f"Failed to compute query embedding: {e}")
 
+        # Build where filter if type specified
+        where_filter = None
+        if filter_type == "document_summary":
+            where_filter = {"type": {"$eq": "document_summary"}}
+        elif filter_type == "chunk":
+            where_filter = {"type": {"$ne": "document_summary"}}
+
         try:
             if query_embedding:
                 ext_results = self.external_collection_instance.query(
                     query_embeddings=[query_embedding],
                     n_results=n_results,
+                    where=where_filter,
                 )
             else:
                 ext_results = self.external_collection_instance.query(
-                    query_texts=[query], n_results=n_results
+                    query_texts=[query],
+                    n_results=n_results,
+                    where=where_filter,
                 )
             results.extend(self._format_results(ext_results, "external"))
 
