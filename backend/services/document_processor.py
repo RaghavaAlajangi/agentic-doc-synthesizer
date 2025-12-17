@@ -1,7 +1,7 @@
 import io
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from config.settings import settings
 from langchain.schema import HumanMessage, SystemMessage
@@ -12,8 +12,19 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentProcessor:
-    """Service for processing and chunking PDF documents with semantic
-    understanding"""
+    """
+    ETL service for processing and chunking PDF/TXT documents.
+
+    This is the data ingestion pipeline that:
+    1. Reads uploaded files
+    2. Creates semantic/section chunks for grounding & citation
+    3. Generates summaries and extracts key financial information
+    4. Stores rich metadata for efficient RAG retrieval
+    5. Creates document-level executive summary for navigation
+
+    The agent pipeline then uses these pre-processed artifacts for fast
+    and grounded reasoning without blind vector DB searches.
+    """
 
     def __init__(
         self,
@@ -62,8 +73,17 @@ class DocumentProcessor:
 
     async def process_pdf(
         self, file_content: bytes, filename: str
-    ) -> List[Dict[str, Any]]:
-        """Process PDF: extract text, create chunks, summarize
+    ) -> Tuple[List[Dict[str, Any]], str]:
+        """
+        Process PDF: extract text, create chunks, summarize, extract metadata.
+
+        ETL Pipeline:
+        1. Extract text from pages (with page tracking)
+        2. Create semantic chunks (sections for grounding)
+        3. For each chunk: generate summary, extract vital info, store metadata
+        4. Generate document-level executive summary
+
+        Returns both chunks and document summary for storage.
 
         Parameters
         ----------
@@ -74,23 +94,29 @@ class DocumentProcessor:
 
         Returns
         -------
-        List[Dict[str, Any]]
-            List of chunks with metadata, summaries, and extracted information
+        Tuple[List[Dict[str, Any]], str]
+            Tuple of (chunks_with_metadata, document_summary)
+            - chunks: List of chunks with enhanced metadata for citations
+            - doc_summary: Document-level executive summary
         """
         try:
-            # Extract text from PDF
-            text = await self._extract_text_from_pdf(file_content)
+            # Extract text from PDF with page markers
+            text, pages_metadata = await self._extract_text_from_pdf(
+                file_content
+            )
 
             if not text.strip():
                 logger.warning(f"No text extracted from {filename}")
-                return []
+                return [], ""
 
-            # Create semantic chunks
+            # Create semantic chunks (sections for grounding)
             chunks = await self._create_semantic_chunks(text)
 
-            # For each chunk: summarize and extract
-            # vital information
+            # For each chunk: summarize and extract vital information
+            # These summaries are for navigation & reasoning in agent pipeline
             chunks_with_metadata = []
+            chunk_summaries = []  # Collect for document summary
+
             for idx, chunk in enumerate(chunks):
                 summary = ""
                 vital_info = {}
@@ -99,6 +125,20 @@ class DocumentProcessor:
                 if self.llm:
                     summary = await self._summarize_chunk(chunk)
                     vital_info = await self._extract_vital_info(chunk, summary)
+                    chunk_summaries.append(summary)
+
+                page_range = self._estimate_page_range(chunk, text)
+
+                # Enhanced metadata for RAG agent retrieval
+                # This enables section-level search before chunk search
+                chunk_metadata = {
+                    "page_range": page_range,
+                    "section": f"Section {idx + 1}",
+                    "summary": summary,  # Section summary for navigation
+                    "vital_info": vital_info,  # Extracted concepts
+                    "chunk_index": idx,
+                    "total_chunks": len(chunks),
+                }
 
                 chunks_with_metadata.append(
                     {
@@ -108,32 +148,24 @@ class DocumentProcessor:
                         "source_type": "external",
                         "summary": summary,
                         "vital_info": vital_info,
-                        "metadata": {
-                            "page_range": (
-                                self._estimate_page_range(chunk, text)
-                            )
-                        },
+                        "metadata": chunk_metadata,
                     }
                 )
 
-            # Create document-level summary
-            if self.llm and chunks_with_metadata:
-                summaries = [
-                    c.get("summary", c["content"][:500])
-                    for c in chunks_with_metadata
-                ]
-                doc_summary = await self._summarize_document(summaries)
-                # Store at document level (can be returned separately)
-                logger.info(
-                    f"Document-level summary created " f"for {filename}"
-                )
+            # Create document-level executive summary
+            # This is stored for agents to retrieve for fast context
+            doc_summary = ""
+            if self.llm and chunk_summaries:
+                doc_summary = await self._summarize_document(chunk_summaries)
+                logger.info(f"Document-level summary created for {filename}")
 
             logger.info(
                 f"Processed {filename}: "
-                f"created {len(chunks_with_metadata)} "
-                f"semantic chunks"
+                f"created {len(chunks_with_metadata)} semantic chunks "
+                f"with rich metadata"
             )
-            return chunks_with_metadata
+
+            return chunks_with_metadata, doc_summary
 
         except Exception as e:
             logger.error(f"Error processing PDF {filename}: {e}")
@@ -242,7 +274,8 @@ class DocumentProcessor:
         Returns
         -------
         Dict[str, Any]
-            Dictionary with extracted info: sectors, recommendations, metrics, risks
+            Dictionary with extracted info: sectors, recommendations, metrics,
+            risks
         """
         if not self.llm:
             return {}
@@ -307,8 +340,11 @@ class DocumentProcessor:
             logger.error(f"Error creating document summary: {e}")
             return ""
 
-    async def _extract_text_from_pdf(self, file_content: bytes) -> str:
-        """Extract text from PDF content
+    async def _extract_text_from_pdf(
+        self, file_content: bytes
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Extract text from PDF content with page tracking.
 
         Parameters
         ----------
@@ -317,20 +353,28 @@ class DocumentProcessor:
 
         Returns
         -------
-        str
-            Extracted text
+        Tuple[str, Dict[str, Any]]
+            Tuple of (extracted_text, pages_metadata)
+            - text: Full extracted text with page markers
+            - metadata: Page count and other document info
         """
         try:
             pdf_file = io.BytesIO(file_content)
             pdf_reader = PdfReader(pdf_file)
 
             text = ""
-            for page_num in range(len(pdf_reader.pages)):
+            total_pages = len(pdf_reader.pages)
+
+            for page_num in range(total_pages):
                 page = pdf_reader.pages[page_num]
                 text += f"\n--- Page {page_num + 1} ---\n"
                 text += page.extract_text()
 
-            return text
+            pages_metadata = {
+                "total_pages": total_pages,
+            }
+
+            return text, pages_metadata
         except Exception as e:
             logger.error(f"Error extracting text from PDF: {e}")
             raise
@@ -405,8 +449,11 @@ class DocumentProcessor:
 
     async def process_text_file(
         self, content: str, filename: str
-    ) -> List[Dict[str, Any]]:
-        """Process plain text file
+    ) -> Tuple[List[Dict[str, Any]], str]:
+        """
+        Process plain text file.
+
+        ETL Pipeline for TXT files (without page extraction).
 
         Parameters
         ----------
@@ -417,27 +464,54 @@ class DocumentProcessor:
 
         Returns
         -------
-        List[Dict[str, Any]]
-            List of chunks with metadata
+        Tuple[List[Dict[str, Any]], str]
+            Tuple of (chunks_with_metadata, document_summary)
         """
         try:
             chunks = self._create_chunks(content)
 
-            chunks_with_metadata = [
-                {
-                    "content": chunk,
-                    "chunk_id": idx,
-                    "filename": filename,
-                    "source_type": "external",
-                    "metadata": {},
+            # For each chunk: summarize if LLM available
+            chunks_with_metadata = []
+            chunk_summaries = []
+
+            for idx, chunk in enumerate(chunks):
+                summary = ""
+                vital_info = {}
+
+                if self.llm:
+                    summary = await self._summarize_chunk(chunk)
+                    vital_info = await self._extract_vital_info(chunk, summary)
+                    chunk_summaries.append(summary)
+
+                chunk_metadata = {
+                    "section": f"Section {idx + 1}",
+                    "summary": summary,
+                    "vital_info": vital_info,
+                    "chunk_index": idx,
+                    "total_chunks": len(chunks),
                 }
-                for idx, chunk in enumerate(chunks)
-            ]
+
+                chunks_with_metadata.append(
+                    {
+                        "content": chunk,
+                        "chunk_id": idx,
+                        "filename": filename,
+                        "source_type": "external",
+                        "summary": summary,
+                        "vital_info": vital_info,
+                        "metadata": chunk_metadata,
+                    }
+                )
+
+            # Create document-level summary
+            doc_summary = ""
+            if self.llm and chunk_summaries:
+                doc_summary = await self._summarize_document(chunk_summaries)
 
             logger.info(
-                f"Processed {filename}: " f"extracted {len(chunks)} chunks"
+                f"Processed {filename}: extracted {len(chunks)} chunks"
             )
-            return chunks_with_metadata
+            return chunks_with_metadata, doc_summary
 
         except Exception as e:
             logger.error(f"Error processing text file {filename}: {e}")
