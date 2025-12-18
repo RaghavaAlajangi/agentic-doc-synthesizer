@@ -12,7 +12,7 @@ from models.schemas import AgentThought, StreamEvent
 
 from .agent_tools import AgentToolRegistry
 from .database import ChromaDBService
-from .financial_data import FinancialDataService
+from .sqlite_service import SQLiteService
 
 logger = logging.getLogger(__name__)
 
@@ -108,22 +108,19 @@ class AgentOrchestrator:
 
     Implements a flexible agent network for query processing:
     1. Planning Agent (Router) - Breaks down complex queries into subtasks
-    2. RAG Agent - Fetches relevant chunks with source attribution
-    3. Summarizer - Extracts key findings from documents
-    4. Financial Extractor - Pulls financial metrics
-    5. Comparator - Analyzes internal vs external views
-    6. Task Executor - Dynamically executes tasks based on type
-    7. Synthesizer - Generates final response with citations
+    2. RAG Agent - Fetches relevant chunks + document summaries from ETL
+    3. Task Executor - Dynamically executes tasks (summarize, extract, compare)
+    4. Synthesizer - Generates final response with citations
 
     Tasks are decomposed and executed dynamically based on their specific
-    requirements rather than following a fixed linear path.
+    requirements rather than following a fixed linear path. The orchestrator
+    leverages pre-processed artifacts from the ETL pipeline (chunks, summaries,
+    metadata) for fast and grounded reasoning.
 
     Attributes
     ----------
     db : ChromaDBService
-        Vector database service for semantic search.
-    financial_data : FinancialDataService
-        Service for financial data retrieval.
+        Vector database service for semantic search and metadata retrieval.
     llm : ChatOpenAI
         Language model for agent reasoning.
     tools : AgentToolRegistry
@@ -135,7 +132,7 @@ class AgentOrchestrator:
     def __init__(
         self,
         db_service: ChromaDBService,
-        financial_data_service: FinancialDataService,
+        sqlite_service: Optional[SQLiteService] = None,
     ):
         """
         Initialize the dynamic multi-agent orchestrator.
@@ -144,11 +141,11 @@ class AgentOrchestrator:
         ----------
         db_service : ChromaDBService
             Vector database service instance.
-        financial_data_service : FinancialDataService
-            Financial data service instance.
+        sqlite_service : Optional[SQLiteService]
+            SQLite service for storing/retrieving document summaries.
         """
         self.db = db_service
-        self.financial_data = financial_data_service
+        self.sqlite_db = sqlite_service
         self.llm = ChatOpenAI(
             model=settings.openai_model,
             temperature=settings.openai_temperature,
@@ -158,7 +155,6 @@ class AgentOrchestrator:
         # Initialize tool registry
         self.tools = AgentToolRegistry(
             db_service=self.db,
-            financial_data_service=self.financial_data,
             llm_service=self.llm,
         )
 
@@ -357,9 +353,17 @@ class AgentOrchestrator:
         """
         Retrieve relevant document chunks with source attribution.
 
-        Fetches relevant chunks from the vector database and stores
-        complete source information for citation purposes. Extracts rich
-        metadata including company name, report type, date, analyst, etc.
+        RAG Pipeline:
+        1. Fetch document-level summaries from SQLite (fast context)
+        2. Search for relevant chunks from vector DB with section summaries
+        3. Extract and store rich citations with page ranges and vital info
+        4. Store section summaries in citations for navigation
+
+        This two-tier approach prevents:
+        - Blind vector DB searching
+        - Missing context/hallucinated facts
+        - Inefficient chunk-by-chunk reasoning
+        - Polluting vector DB with summary embeddings
 
         Parameters
         ----------
@@ -370,60 +374,137 @@ class AgentOrchestrator:
         -------
         AgentState
             Updated state with search_results and citations with full
-            metadata.
+            metadata and summaries.
         """
         query = state["query"]
 
         try:
-            # Search for relevant documents
-            search_results = await self.db.search_documents(query, n_results=5)
-            state["search_results"] = search_results
+            logger.info(f"RAG Agent: Starting retrieval for query: {query}")
+
+            # STEP 1: Retrieve document-level summaries from SQLite
+            # This gives agents quick overview of relevant documents without
+            # polluting vector DB with summary embeddings
+            logger.info(
+                "RAG Agent: Phase 1 - Retrieving document summaries "
+                "from SQLite"
+            )
+            doc_summaries = []
+            if self.sqlite_db:
+                try:
+                    all_summaries = await self.sqlite_db.get_all_summaries()
+                    # In a production system, you might want to rank these
+                    # by relevance, but for now we fetch all
+                    doc_summaries = [
+                        {
+                            "document_id": s.document_id,
+                            "filename": s.filename,
+                            "summary": s.summary_text,
+                            "chunk_count": s.chunk_count,
+                            "file_size": s.file_size,
+                            "source_type": s.source_type,
+                        }
+                        for s in all_summaries
+                    ]
+                    logger.info(
+                        f"RAG Agent: Retrieved {len(doc_summaries)} "
+                        f"document summaries from SQLite"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to fetch summaries from SQLite: {e}. "
+                        "Continuing with chunk-only search."
+                    )
+            else:
+                logger.warning(
+                    "SQLite service not configured. Skipping "
+                    "document summaries retrieval."
+                )
+
+            # STEP 2: Retrieve chunk-level results with section summaries
+            # Search for chunks within document summary context
+            logger.info(
+                "RAG Agent: Phase 2 - Retrieving detailed chunks "
+                "from vector DB"
+            )
+            chunk_results = await self.db.search_documents(query, n_results=5)
+            state["search_results"] = chunk_results
 
             # Extract and store citations with rich metadata
             citations: List[Citation] = []
-            for idx, result in enumerate(search_results):
+            for idx, result in enumerate(chunk_results):
                 # Extract metadata from result
                 metadata = result.get("metadata", {})
 
                 citation: Citation = {
-                    # Core fields
+                    # Core document identification
                     "document_id": result.get("document_id", "unknown"),
-                    "document_name": result.get("source", "Unknown Document"),
-                    "page_number": metadata.get("page", None),
+                    "document_name": metadata.get(
+                        "filename", "Unknown Document"
+                    ),
+                    # Location information (for citations)
+                    "page_number": metadata.get("page_range", None),
                     "section": metadata.get("section", None),
-                    "chunk_index": idx,
+                    "chunk_index": metadata.get("chunk_index", idx),
+                    "total_chunks": metadata.get("total_chunks", None),
+                    # Content preview
                     "content_snippet": result.get("content", "")[:200],
-                    # Enhanced metadata fields
-                    "company_name": metadata.get("company_name", None),
-                    "report_type": metadata.get("report_type", None),
-                    "report_date": metadata.get("report_date", None),
-                    "document_type": metadata.get("document_type", None),
-                    "author_analyst": metadata.get("author_analyst", None),
-                    "publication_date": metadata.get("publication_date", None),
-                    "total_pages": metadata.get("total_pages", None),
-                    "rating": metadata.get("rating", None),
-                    "target_price": metadata.get("target_price", None),
+                    # Semantic metadata from ETL pipeline
+                    "section_summary": metadata.get(
+                        "summary", None
+                    ),  # 3-4 sentence summary
+                    "vital_info": metadata.get(
+                        "vital_info", None
+                    ),  # {sectors, recommendations, metrics, risks}
+                    # Enhanced metadata (not created by ETL, set to None)
+                    "company_name": None,
+                    "report_type": None,
+                    "report_date": None,
+                    "document_type": None,
+                    "author_analyst": None,
+                    "publication_date": None,
+                    "total_pages": None,
+                    "rating": None,
+                    "target_price": None,
                     "similarity_score": result.get("similarity_score", 0.0),
                 }
                 citations.append(citation)
 
             state["citations"] = citations
 
+            # Add document summaries to state for agent reasoning
+            if doc_summaries:
+                state["summary"] = (
+                    "Document Summaries Available:\n"
+                    + "\n---\n".join(
+                        [
+                            f"Document: {s['filename']}\n"
+                            f"Summary: {s['summary']}\n"
+                            f"(Chunks: {s['chunk_count']}, "
+                            f"Size: {s['file_size']} bytes)"
+                            for s in doc_summaries
+                        ]
+                    )
+                )
+
             thought = AgentThought(
                 agent_name="rag_agent",
                 thought=(
-                    f"Retrieved {len(search_results)} relevant chunks "
-                    "with comprehensive metadata"
+                    f"Retrieved {len(doc_summaries)} document summaries "
+                    f"from SQLite and {len(chunk_results)} detailed chunks "
+                    f"from vector DB with metadata for grounded reasoning"
                 ),
                 tool_used="search_documents",
                 tool_output=(
-                    f"Retrieved {len(search_results)} chunks with "
-                    "citations and metadata"
+                    f"Document summaries from SQLite: {len(doc_summaries)}, "
+                    f"Chunks with citations: {len(chunk_results)}"
                 ),
             )
             state["agent_thoughts"].append(thought)
 
-            logger.info(f"RAG Agent: Retrieved {len(search_results)} chunks")
+            logger.info(
+                f"RAG Agent: Retrieved {len(doc_summaries)} summaries "
+                f"from SQLite and {len(chunk_results)} chunks from vector DB"
+            )
 
         except Exception as e:
             logger.error(f"RAG agent error: {e}")
