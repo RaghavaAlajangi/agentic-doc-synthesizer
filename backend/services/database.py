@@ -465,7 +465,10 @@ class ChromaDBService:
         self, source_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Retrieve all stored documents with optional filtering.
+        Retrieve all unique documents with optional filtering.
+
+        Returns only unique documents (not chunks). Groups chunks by
+        document_id and returns one entry per document with metadata.
 
         Parameters
         ----------
@@ -475,9 +478,9 @@ class ChromaDBService:
         Returns
         -------
         List[Dict[str, Any]]
-            List of documents with metadata.
+            List of unique documents with metadata.
         """
-        documents = []
+        unique_documents = {}  # Track unique docs by document_id
         try:
             if source_type in [None, "external"]:
                 try:
@@ -485,13 +488,23 @@ class ChromaDBService:
                     for doc_id, meta in zip(
                         ext_docs.get("ids", []), ext_docs.get("metadatas", [])
                     ):
-                        documents.append(
-                            {
-                                "id": doc_id,
+                        # Extract document_id from metadata
+                        document_id = meta.get("document_id")
+                        if document_id and (
+                            document_id not in unique_documents
+                        ):
+                            # Only add first occurrence (unique document)
+                            unique_documents[document_id] = {
+                                "document_id": document_id,
+                                "filename": meta.get("filename", "Unknown"),
                                 "source": "external",
+                                "file_size": meta.get("file_size", 0),
+                                "stored_at": meta.get(
+                                    "stored_at",
+                                    datetime.utcnow().isoformat(),
+                                ),
                                 "metadata": meta,
                             }
-                        )
                 except Exception as e:
                     logger.warning(f"Failed to get external docs: {e}")
 
@@ -501,17 +514,27 @@ class ChromaDBService:
                     for doc_id, meta in zip(
                         int_docs.get("ids", []), int_docs.get("metadatas", [])
                     ):
-                        documents.append(
-                            {
-                                "id": doc_id,
+                        # Extract document_id from metadata
+                        document_id = meta.get("document_id")
+                        if document_id and (
+                            document_id not in unique_documents
+                        ):
+                            # Only add first occurrence (unique document)
+                            unique_documents[document_id] = {
+                                "document_id": document_id,
+                                "filename": meta.get("filename", "Unknown"),
                                 "source": "internal",
+                                "file_size": meta.get("file_size", 0),
+                                "stored_at": meta.get(
+                                    "stored_at",
+                                    datetime.utcnow().isoformat(),
+                                ),
                                 "metadata": meta,
                             }
-                        )
                 except Exception as e:
                     logger.warning(f"Failed to get internal docs: {e}")
 
-            return documents
+            return list(unique_documents.values())
         except Exception as e:
             logger.error(f"Error getting documents: {e}")
             return []
