@@ -17,7 +17,7 @@ from models.schemas import (
 from services.agent_orchestrator import AgentOrchestrator
 from services.database import ChromaDBService
 from services.document_processor import DocumentProcessor
-from services.financial_data import FinancialDataService
+from services.sqlite_service import SQLiteService
 
 # Setup logging
 logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO))
@@ -43,7 +43,7 @@ app.add_middleware(
 db_service: ChromaDBService = None
 doc_processor: DocumentProcessor = None
 orchestrator: AgentOrchestrator = None
-financial_data_service: FinancialDataService = None
+sqlite_service: SQLiteService = None
 
 
 @app.on_event("startup")
@@ -52,9 +52,8 @@ async def startup_event():
     Initialize services on application startup.
 
     Initializes all global service instances including database,
-    document processor, financial data service, and the multi-agent
-    orchestrator. Called automatically when the FastAPI application
-    starts.
+    document processor, and the multi-agent orchestrator.
+    Called automatically when the FastAPI application starts.
 
     Raises
     ------
@@ -62,7 +61,7 @@ async def startup_event():
         If any service fails to initialize, the error is logged and
         re-raised.
     """
-    global db_service, doc_processor, orchestrator, financial_data_service
+    global db_service, doc_processor, orchestrator, sqlite_service
     try:
         logger.info("Initializing services...")
 
@@ -70,7 +69,6 @@ async def startup_event():
             external_host=settings.external_chroma_host,
             external_port=settings.external_chroma_port,
         )
-        financial_data_service = FinancialDataService()
         doc_processor = DocumentProcessor(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
@@ -78,8 +76,9 @@ async def startup_event():
             openai_model=settings.openai_model,
             temperature=settings.document_processor_temperature,
         )
-        orchestrator = AgentOrchestrator(db_service, financial_data_service)
-        logger.info("Services initialized with Smart Orchestrator")
+        sqlite_service = SQLiteService(db_path="data/summaries.db")
+        orchestrator = AgentOrchestrator(db_service, sqlite_service)
+        logger.info("Services initialized successfully")
     except Exception as e:
         logger.error(f"Error initializing services: {e}")
         raise
@@ -129,6 +128,13 @@ async def upload_document(file: UploadFile = File(...)):
     """
     Upload and process a research report document.
 
+    Executes ETL Pipeline:
+    1. Extract text and create semantic chunks
+    2. Summarize chunks and extract key financial information
+    3. Generate document-level executive summary
+    4. Store chunks + metadata in vector DB
+    5. Store document summary for agent RAG retrieval
+
     Accepts PDF or TXT files up to 10MB, processes them into chunks,
     and stores them in the vector database for semantic search.
 
@@ -173,29 +179,59 @@ async def upload_document(file: UploadFile = File(...)):
         # Generate document ID
         document_id = str(uuid.uuid4())
 
-        # Process document
+        logger.info(f"🔄 Processing document: {file.filename}")
+
+        # ETL PIPELINE: Process document and extract summaries
         if file.filename.lower().endswith(".pdf"):
-            chunks = await doc_processor.process_pdf(content, file.filename)
+            logger.info("📄 Extracting text from PDF...")
+            chunks, doc_summary = await doc_processor.process_pdf(
+                content, file.filename
+            )
+            logger.info(f"✅ PDF processed: {len(chunks)} chunks extracted")
         else:
+            logger.info("📝 Processing text file...")
             text_content = content.decode("utf-8")
-            chunks = await doc_processor.process_text_file(
+            chunks, doc_summary = await doc_processor.process_text_file(
                 text_content, file.filename
             )
+            logger.info(
+                f"✅ Text file processed: {len(chunks)} chunks extracted"
+            )
 
-        # Store chunks in vector DB
+        # Store chunks in vector DB (with enhanced metadata)
+        logger.info("📤 Pushing chunks to vector database...")
         chunk_count = 0
-        for chunk in chunks:
+        for idx, chunk in enumerate(chunks, 1):
             await db_service.store_document_chunk(
                 content=chunk["content"],
                 document_id=document_id,
                 filename=file.filename,
                 chunk_id=chunk["chunk_id"],
                 metadata=chunk.get("metadata", {}),
+                section_summary=chunk.get("summary", ""),
             )
             chunk_count += 1
+            logger.info(f"📥 Pushed chunk {idx}/{len(chunks)} to vector DB")
+
+        logger.info(f"✅ All {chunk_count} chunks pushed to vector DB")
+
+        # Store document-level summary in SQLite (not in vector DB)
+        # This keeps the vector DB clean and focused on chunk embeddings
+        if doc_summary:
+            logger.info("📚 Storing document summary in SQLite...")
+            await sqlite_service.store_summary(
+                document_id=document_id,
+                filename=file.filename,
+                summary_text=doc_summary,
+                chunk_count=chunk_count,
+                file_size=file_size,
+                source_type="external",
+            )
+            logger.info("✅ Document summary stored in SQLite")
 
         logger.info(
-            f"Stored document {document_id} with " f"{chunk_count} chunks"
+            f"✅ Stored document {document_id} with {chunk_count} chunks "
+            f"and document summary"
         )
 
         metadata = DocumentMetadata(
@@ -255,6 +291,7 @@ async def chat(request: ChatRequest):
             response=response["response"],
             agent_thoughts=response["agent_thoughts"],
             search_results=response["search_results"],
+            citations=response.get("citations", []),
             recommendations=response["recommendations"],
             conversation_id=request.conversation_id,
         )
