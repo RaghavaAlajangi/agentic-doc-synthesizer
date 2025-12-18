@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { chatService, StreamEvent } from '../services/api';
 import '../styles/Chat.css';
+import { CitationDisplay } from './CitationDisplay';
 
 interface Message {
   id: string;
@@ -10,6 +11,7 @@ interface Message {
   timestamp: Date;
   agentThoughts?: any[];
   searchResults?: any[];
+  citations?: any[];
   recommendations?: any[];
   isStreaming?: boolean;
   currentStep?: string;
@@ -55,6 +57,7 @@ export const Chat: React.FC = () => {
         isStreaming: true,
         agentThoughts: [],
         searchResults: [],
+        citations: [],
         recommendations: [],
       };
 
@@ -110,6 +113,7 @@ export const Chat: React.FC = () => {
 
                 case 'final_response':
                   msg.content = event.data.response;
+                  msg.citations = event.data.citations || [];
                   msg.isStreaming = false;
                   msg.currentStep = 'Response generated';
                   msg.stepStatus = 'completed';
@@ -406,7 +410,10 @@ export const Chat: React.FC = () => {
                                           <div className="source-header">
                                             <div className="source-info">
                                               <h4 className="source-title">
-                                                {chunk_metadata.document_name || metadata.source || 'Unknown Document'}
+                                                {metadata.filename ||
+                                                  chunk_metadata.document_name ||
+                                                  metadata.source ||
+                                                  'Unknown Document'}
                                               </h4>
                                               <p className="source-relevance">
                                                 Relevance: {(
@@ -516,6 +523,11 @@ export const Chat: React.FC = () => {
                       )}
                     </div>
                   </details>
+                )}
+
+              {message.citations &&
+                message.citations.length > 0 && (
+                  <CitationDisplay citations={message.citations} />
                 )}
 
               {message.isStreaming && (
