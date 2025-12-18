@@ -796,7 +796,3 @@ class StubCollection:
             for doc_id in ids:
                 self.documents.pop(doc_id, None)
                 self.embeddings.pop(doc_id, None)
-
-                self.embeddings.pop(doc_id, None)
-
-                self.embeddings.pop(doc_id, None)
