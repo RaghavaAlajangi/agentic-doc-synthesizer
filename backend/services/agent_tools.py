@@ -194,23 +194,25 @@ class SummarizationTool:
         """
         try:
             prompt = (
-                "You are a financial research analyst. "
-                "Summarize the key findings, "
-                "recommendations, and investment "
-                "thesis from this research.\n\n"
+                "You are a sell-side research analyst. "
+                "Summarize the key investment recommendations "
+                "from this cross-asset research report.\n\n"
                 "Focus on:\n"
-                "1. Main thesis and key arguments\n"
-                "2. Target asset classes and "
-                "recommendations\n"
-                "3. Key metrics and data points\n"
-                "4. Risk factors mentioned\n"
-                "5. Investment implications\n\n"
+                "1. Specific recommendations by asset class\n"
+                "2. Price targets and valuation levels\n"
+                "3. Recommended positioning and allocation\n"
+                "4. Key macro drivers and themes\n"
+                "5. Primary risks and catalysts\n"
+                "6. Timing and implementation guidance\n\n"
                 f"Content:\n{content}\n\n"
-                "Provide a comprehensive summary."
+                "Provide a comprehensive summary of "
+                "actionable recommendations."
             )
 
             messages = [
-                SystemMessage(content="You are an expert financial analyst."),
+                SystemMessage(
+                    content=("You are an expert sell-side research analyst.")
+                ),
                 HumanMessage(content=prompt),
             ]
 
@@ -309,24 +311,27 @@ class FinancialExtractionTool:
         """
         try:
             prompt = (
-                "Extract all key financial metrics, "
-                "statements, and data points.\n\n"
+                "Extract all recommendation metrics and "
+                "allocation guidance from this sell-side "
+                "cross-asset research.\n\n"
                 "Focus on:\n"
-                "1. P/E ratios, valuation multiples\n"
-                "2. Growth rates (earnings, revenue)\n"
-                "3. Dividend yields\n"
-                "4. Credit metrics (for fixed income)\n"
-                "5. Asset allocations\n"
-                "6. Price targets and return "
-                "expectations\n"
-                "7. Key assumptions\n\n"
+                "1. Specific recommendations with ratings\n"
+                "2. Price targets and valuation ranges\n"
+                "3. Portfolio allocations by asset class\n"
+                "4. Performance drivers and catalysts\n"
+                "5. Forecast assumptions\n"
+                "6. Risk/reward analysis and rationale\n"
+                "7. Entry/exit levels and timing\n\n"
                 f"Content:\n{content}\n\n"
-                "Format as structured list."
+                "Format as structured list of key metrics."
             )
 
             messages = [
                 SystemMessage(
-                    content="You are a financial data extraction specialist."
+                    content=(
+                        "You are a sell-side research data "
+                        "specialist extracting metrics."
+                    )
                 ),
                 HumanMessage(content=prompt),
             ]
@@ -430,20 +435,24 @@ class ComparisonTool:
         """
         try:
             prompt = (
-                "Compare external research with "
-                "internal views.\n\n"
+                "Compare external sell-side recommendations "
+                "with internal views.\n\n"
                 f"EXTERNAL RESEARCH:\n{external}\n\n"
                 f"INTERNAL VIEW:\n{internal}\n\n"
                 "Provide:\n"
-                "1. Areas of agreement\n"
-                "2. Key differences\n"
-                "3. Risk factors each emphasizes\n"
-                "4. Recommended action"
+                "1. Alignment in recommendations by asset\n"
+                "2. Divergence in macro views\n"
+                "3. Positioning rationale differences\n"
+                "4. Where views diverge most significantly\n"
+                "5. Recommended portfolio adjustments"
             )
 
             messages = [
                 SystemMessage(
-                    content="You are a portfolio manager comparing analyses."
+                    content=(
+                        "You are a portfolio manager comparing "
+                        "sell-side research with internal positioning."
+                    )
                 ),
                 HumanMessage(content=prompt),
             ]

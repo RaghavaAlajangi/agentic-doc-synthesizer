@@ -244,10 +244,15 @@ class DocumentProcessor:
 
         try:
             system_prompt = (
-                "You are a financial analyst. "
-                "Summarize the provided text in 3-4 sentences, "
-                "focusing on key investment insights, "
-                "recommendations, or financial metrics."
+                "You are a sell-side financial research analyst specializing "
+                "in cross-asset research reports. "
+                "Summarize the provided section in 3-4 sentences, "
+                "highlighting:\n"
+                "1. Key investment recommendations (Buy/Hold/Sell)\n"
+                "2. Target asset classes and allocation guidance\n"
+                "3. Main thesis or strategic positioning\n"
+                "4. Price targets or valuation implications\n"
+                "5. Key risks or market catalysts"
             )
             messages = [
                 SystemMessage(content=system_prompt),
@@ -282,19 +287,21 @@ class DocumentProcessor:
 
         try:
             system_prompt = (
-                "Extract vital investment information from "
-                "the text. Return JSON with:\n"
-                '{"sectors": [list of sectors mentioned], '
+                "Extract vital sell-side research information from text. "
+                "Return JSON with:\n"
+                '{"sectors": [list of sectors/asset classes], '
                 '"recommendations": '
-                "[list of buy/hold/sell recommendations], "
-                '"metrics": '
-                "{key financial metrics and values}, "
-                '"risks": [list of identified risks]}\n'
-                "If any field is not found, leave empty list/dict."
+                "[list of Buy/Hold/Sell recommendations], "
+                '"price_targets": [list of price targets], '
+                '"allocation_guidance": '
+                "[positioning weights if mentioned], "
+                '"metrics": [key metrics for recommendations], '
+                '"risks": [identified risks or headwinds]}\n'
+                "If any field not found, leave empty."
             )
             messages = [
                 SystemMessage(content=system_prompt),
-                HumanMessage(content=f"Chunk:\n{chunk}"),
+                HumanMessage(content=f"Research Section:\n{chunk}"),
             ]
             response = self.llm.invoke(messages)
             try:
@@ -324,11 +331,14 @@ class DocumentProcessor:
         try:
             combined = "\n\n".join(chunk_summaries)
             system_prompt = (
-                "You are a financial analyst. "
-                "Create a concise executive summary "
-                "(3-5 sentences) of the document based on "
-                "the provided chunk summaries. Focus on key "
-                "investment opportunities and risks."
+                "You are a sell-side research analyst. Create a concise "
+                "executive summary (3-5 sentences) of the research report "
+                "based on the provided section summaries. Focus on:\n"
+                "1. Main investment recommendations across asset classes\n"
+                "2. Overall portfolio positioning guidance\n"
+                "3. Key thematic or macro drivers\n"
+                "4. Primary risks and opportunities\n"
+                "5. Recommended action for investors"
             )
             messages = [
                 SystemMessage(content=system_prompt),

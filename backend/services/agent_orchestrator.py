@@ -194,12 +194,12 @@ class AgentOrchestrator:
 
     def _planning_agent(self, state: AgentState) -> AgentState:
         """
-        Plan and decompose complex query into subtasks.
+        Plan and decompose sell-side research query into subtasks.
 
         Analyzes the query to determine what types of tasks need to be
-        executed. For example, a query asking about "comparison of
-        investment views" would generate tasks for RAG fetch, analysis,
-        and comparison.
+        executed. For sell-side cross-asset research, prioritizes tasks
+        for extracting recommendations across asset classes, key metrics,
+        and investment positioning.
 
         Parameters
         ----------
@@ -220,7 +220,7 @@ class AgentOrchestrator:
             {
                 "id": task_id,
                 "type": TaskType.RAG_FETCH,
-                "description": "Fetch relevant chunks from documents",
+                "description": ("Fetch relevant chunks from research reports"),
                 "query": state["query"],
                 "status": "pending",
                 "result": None,
@@ -240,6 +240,10 @@ class AgentOrchestrator:
                 "overview",
                 "brief",
                 "key findings",
+                "executive",
+                "recommendation",
+                "suggest",
+                "what should",
             ]
         ):
             task_id = f"task_{task_counter:03d}"
@@ -247,7 +251,10 @@ class AgentOrchestrator:
                 {
                     "id": task_id,
                     "type": TaskType.SUMMARIZE,
-                    "description": "Summarize relevant documents",
+                    "description": (
+                        "Summarize research recommendations "
+                        "across asset classes"
+                    ),
                     "query": state["query"],
                     "status": "pending",
                     "result": None,
@@ -256,7 +263,7 @@ class AgentOrchestrator:
             )
             task_counter += 1
 
-        # Check if financial extraction is needed
+        # Check if financial/metrics extraction is needed
         if any(
             word in query
             for word in [
@@ -270,6 +277,11 @@ class AgentOrchestrator:
                 "dividend",
                 "yield",
                 "price target",
+                "allocation",
+                "positioning",
+                "weight",
+                "target price",
+                "forecast",
             ]
         ):
             task_id = f"task_{task_counter:03d}"
@@ -277,7 +289,10 @@ class AgentOrchestrator:
                 {
                     "id": task_id,
                     "type": TaskType.EXTRACT_FINANCIAL,
-                    "description": "Extract financial metrics and data",
+                    "description": (
+                        "Extract recommendation metrics and "
+                        "allocation guidance"
+                    ),
                     "query": state["query"],
                     "status": "pending",
                     "result": None,
@@ -299,6 +314,8 @@ class AgentOrchestrator:
                 "internal",
                 "view",
                 "position",
+                "better",
+                "worse",
             ]
         ):
             task_id = f"task_{task_counter:03d}"
@@ -307,7 +324,8 @@ class AgentOrchestrator:
                     "id": task_id,
                     "type": TaskType.COMPARE,
                     "description": (
-                        "Compare external analysis with internal views"
+                        "Compare external research with "
+                        "internal positioning"
                     ),
                     "query": state["query"],
                     "status": "pending",
@@ -323,7 +341,9 @@ class AgentOrchestrator:
             {
                 "id": task_id,
                 "type": TaskType.SYNTHESIS,
-                "description": "Synthesize results into final response",
+                "description": (
+                    "Synthesize recommendations into " "actionable guidance"
+                ),
                 "query": state["query"],
                 "status": "pending",
                 "result": None,
@@ -335,7 +355,8 @@ class AgentOrchestrator:
 
         thought = AgentThought(
             agent_name="planning_agent",
-            thought=f"Decomposed query into {len(tasks)} tasks",
+            thought=f"Decomposed sell-side research query into {len(tasks)} "
+            f"tasks",
             tool_used="planning_agent",
             tool_output=(
                 f"Tasks: {', '.join([t['type'].value for t in tasks])}"
@@ -644,27 +665,32 @@ class AgentOrchestrator:
         )
 
         summary_prompt = f"""
-        You are a financial research analyst. Summarize the key findings,
-        recommendations, and investment thesis from this research report.
+        You are a sell-side research analyst. Summarize the key investment
+        recommendations from this cross-asset research report.
 
         Focus on:
-        1. Main thesis and key arguments
-        2. Target asset classes and recommendations
-        3. Key metrics and data points
-        4. Risk factors mentioned
-        5. Investment implications
+        1. Specific investment recommendations by asset class
+           (equities, fixed income, commodities, FX, alternatives)
+        2. Target price or valuation levels
+        3. Recommended portfolio positioning and allocation weights
+        4. Primary macro drivers and themes
+        5. Key risks, constraints, and market catalysts
+        6. Timing and implementation guidance
 
         Research Content:
         {combined_content}
 
-        Provide a comprehensive summary.
+        Provide a comprehensive summary highlighting actionable
+        recommendations.
         """
 
         try:
             messages = [
                 SystemMessage(
-                    content="You are an expert financial analyst "
-                    "summarizing research reports."
+                    content=(
+                        "You are a sell-side research analyst "
+                        "summarizing cross-asset recommendations."
+                    )
                 ),
                 HumanMessage(content=summary_prompt),
             ]
@@ -698,19 +724,21 @@ class AgentOrchestrator:
         )
 
         extraction_prompt = f"""
-        Extract all key financial metrics, statements, and data points from
-        this research report.
+        Extract all recommendation metrics and allocation guidance from
+        this sell-side cross-asset research report.
 
         Focus on:
-        1. P/E ratios, valuation multiples
-        2. Growth rates (earnings growth, revenue growth)
-        3. Dividend yields
-        4. Credit metrics (for fixed income)
-        5. Asset allocations (for multi-asset)
-        6. Price targets and return expectations
-        7. Key assumptions
+        1. Specific recommendations with ratings
+           (Buy/Hold/Sell or Overweight/Neutral/Underweight)
+        2. Price targets, valuation ranges, and implied returns
+        3. Recommended portfolio allocations by asset class
+        4. Key performance drivers and catalysts
+        5. Forecast assumptions (growth rates, inflation, rates, etc.)
+        6. Risk/reward analysis and positioning rationale
+        7. Entry/exit levels or timing
 
-        Format the output as a structured list of key metrics.
+        Format the output as a structured list of key recommendation
+        metrics, including target prices, allocations, and ratings.
 
         Research Content:
         {combined_content}
@@ -719,7 +747,10 @@ class AgentOrchestrator:
         try:
             messages = [
                 SystemMessage(
-                    content="You are a financial data extraction specialist."
+                    content=(
+                        "You are a sell-side research data specialist "
+                        "extracting recommendation metrics."
+                    )
                 ),
                 HumanMessage(content=extraction_prompt),
             ]
@@ -770,7 +801,8 @@ class AgentOrchestrator:
         """
 
         comparison_prompt = f"""
-        Compare the external research recommendations with our internal views.
+        Compare the external sell-side recommendations with our internal
+        portfolio positioning and views.
 
         EXTERNAL RESEARCH:
         {external_content}
@@ -779,17 +811,23 @@ class AgentOrchestrator:
         {internal_view}
 
         Provide:
-        1. Areas of agreement
-        2. Key differences and divergences
-        3. Risk factors each emphasizes
-        4. Recommended action
+        1. Alignment or divergence in recommendations
+           (by asset class and specific positions)
+        2. Key differences in macro views and risk assessment
+        3. Different positioning rationale or conviction levels
+        4. Where internal view is more/less optimistic
+        5. Recommended portfolio adjustments based on comparison
+        6. Risk management implications
         """
 
         try:
             messages = [
                 SystemMessage(
-                    content="You are a portfolio manager comparing "
-                    "external and internal analysis."
+                    content=(
+                        "You are a portfolio manager comparing "
+                        "external sell-side research with "
+                        "internal positioning."
+                    )
                 ),
                 HumanMessage(content=comparison_prompt),
             ]
@@ -891,26 +929,33 @@ class AgentOrchestrator:
         context = "\n\n".join(context_parts)
 
         synthesis_prompt = f"""
-        Based on the analysis below, provide a concise, actionable answer to
-        the user's query.
+        You are a senior sell-side research analyst. Based on the analysis
+        below, provide clear and actionable investment recommendations in
+        response to the user's query.
 
         USER QUERY: {query}
 
         ANALYSIS:
         {context}
 
-        Provide a clear, direct answer that:
-        1. Addresses the specific question
-        2. Includes specific data points and metrics where relevant
-        3. Provides recommendations
-        4. Acknowledges any limitations or uncertainties
+        Provide a clear, direct response that:
+        1. Clearly states specific investment recommendations
+           (by asset class and position)
+        2. Includes price targets, allocation weights, or ratings where
+           relevant
+        3. Explains the macro drivers and investment thesis
+        4. Identifies key risks and monitoring points
+        5. Provides timing or implementation guidance
+        6. References specific data points and metrics to support claims
         """
 
         try:
             messages = [
                 SystemMessage(
-                    content="You are a financial analyst providing "
-                    "expert insights based on research."
+                    content=(
+                        "You are a sell-side research analyst "
+                        "providing expert investment guidance."
+                    )
                 ),
                 HumanMessage(content=synthesis_prompt),
             ]
