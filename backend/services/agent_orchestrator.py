@@ -612,7 +612,7 @@ class AgentOrchestrator:
                             "Executing COMPARE task - "
                             "Comparing external vs internal views"
                         ),
-                        tool_used="compare_analyses",
+                        tool_used="mock_internal_comparison",
                     )
                     state["agent_thoughts"].append(thought)
                     logger.info(f"Executing COMPARE task: {task_id}")
@@ -782,71 +782,84 @@ class AgentOrchestrator:
     async def _execute_comparison_task(
         self, state: AgentState, task: Task
     ) -> Dict[str, Any]:
-        """Execute comparison task"""
+        """Execute comparison task using MockInternalComparisonTool"""
         if not state["search_results"]:
             return {"comparison": "", "error": "No search results"}
 
+        # Extract external content from search results
         external_content = "\n\n".join(
-            [result["content"] for result in state["search_results"][:2]]
+            [result["content"] for result in state["search_results"][:3]]
         )
 
-        # Mock internal view
-        internal_view = """
-        MOCK INTERNAL ANALYSIS:
-        - Maintain defensive positioning in equities
-        - Prefer quality dividend stocks
-        - Overweight government bonds with 5-7yr maturity
-        - Reduce equity risk in near term
-        - Monitor inflation data for fixed income strategy
-        """
-
-        comparison_prompt = f"""
-        Compare the external sell-side recommendations with our internal
-        portfolio positioning and views.
-
-        EXTERNAL RESEARCH:
-        {external_content}
-
-        INTERNAL VIEW:
-        {internal_view}
-
-        Provide:
-        1. Alignment or divergence in recommendations
-           (by asset class and specific positions)
-        2. Key differences in macro views and risk assessment
-        3. Different positioning rationale or conviction levels
-        4. Where internal view is more/less optimistic
-        5. Recommended portfolio adjustments based on comparison
-        6. Risk management implications
-        """
-
         try:
-            messages = [
-                SystemMessage(
-                    content=(
-                        "You are a portfolio manager comparing "
-                        "external sell-side research with "
-                        "internal positioning."
-                    )
-                ),
-                HumanMessage(content=comparison_prompt),
-            ]
+            # Execute the MockInternalComparisonTool
+            tool_result = await self.tool_registry.execute_tool(
+                "mock_internal_comparison", external=external_content
+            )
 
-            response = await asyncio.to_thread(self.llm.invoke, messages)
-            comparison = response.content
+            # Extract comparison with natural language format
+            # Format comparison to be narrative and conversational
+            # instead of bullet-heavy
+            narrative_comparison = self._format_comparison_narrative(
+                tool_result
+            )
 
             thought = AgentThought(
                 agent_name="comparator",
-                thought="Successfully completed comparison analysis",
-                tool_used="compare_analyses",
+                thought=(
+                    "Compared external research with "
+                    "internal portfolio views"
+                ),
+                tool_used="mock_internal_comparison",
             )
             state["agent_thoughts"].append(thought)
 
-            return {"comparison": comparison}
+            return {"comparison": narrative_comparison, **tool_result}
 
         except Exception as e:
             logger.error(f"Comparison error: {e}")
             return {"comparison": "", "error": str(e)}
+
+    def _format_comparison_narrative(self, tool_result: Dict[str, Any]) -> str:
+        """Format comparison result into natural narrative
+
+        Parameters
+        ----------
+        tool_result : Dict[str, Any]
+            Result from MockInternalComparisonTool
+
+        Returns
+        -------
+        str
+            Formatted narrative comparison
+        """
+        comparison = tool_result.get("comparison", "")
+        validation_score = tool_result.get("validation_score", 0)
+        divergences = tool_result.get("divergences", [])
+        recommendations = tool_result.get("recommendations", [])
+
+        # Build narrative that mirrors report style (verbal, qualitative)
+        narrative = [f"{comparison}"]
+
+        if validation_score:
+            narrative.append(
+                f"\n**Alignment Assessment:** "
+                f"Our internal view shows moderate-to-good alignment "
+                f"with the external recommendations "
+                f"(confidence: {validation_score}/100)."
+            )
+
+        if divergences:
+            narrative.append("\n**Key Observations:**")
+            for div in divergences[:3]:  # Limit to top 3
+                narrative.append(f"• {div}")
+
+        if recommendations:
+            narrative.append("\n**Considerations:**")
+            for rec in recommendations[:3]:  # Limit to top 3
+                narrative.append(f"• {rec}")
+
+        return "\n".join(narrative)
 
     async def _execute_analysis_task(
         self, state: AgentState, task: Task

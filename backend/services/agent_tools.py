@@ -365,8 +365,27 @@ class FinancialExtractionTool:
         return response.content
 
 
-class ComparisonTool:
-    """Tool for comparing external and internal analysis"""
+class MockInternalComparisonTool:
+    """Mock tool for comparing external and internal analysis
+
+    IMPORTANT: This is a MOCK implementation!
+
+    In production, this tool should be replaced with an actual API
+    integration that fetches internal portfolio analysis from a real
+    data source such as:
+    - Bloomberg Terminal API
+    - Internal portfolio management system (e.g., Aladdin, Charles River)
+    - Custom internal analytics database
+    - Risk management systems (RiskMetrics, MSCI)
+
+    The mock returns simulated internal portfolio data for demonstration
+    purposes. Real implementation would:
+    1. Call external API: /internal-portfolio/analysis
+    2. Fetch internal buy/sell calls, risk scores, asset allocations
+    3. Retrieve internal conviction levels and position sizing
+    4. Query performance metrics and attribution
+    5. Return structured comparison data for external validation
+    """
 
     def __init__(self, llm_service):
         """Initialize with LLM service
@@ -375,99 +394,254 @@ class ComparisonTool:
         ----------
         llm_service : LLMService
             LLM service for text generation
+
+        Note
+        ----
+        In production, this would also include API credentials and endpoints
+        for connecting to internal portfolio systems.
         """
         self.llm = llm_service
         self.definition = ToolDefinition(
-            name="compare_analyses",
+            name="mock_internal_comparison",
             description=(
-                "Compare external research "
-                "recommendations with internal "
-                "investment views"
+                "MOCK: Compare external research with internal "
+                "portfolio analysis for validation. In production, "
+                "fetches real internal portfolio data from "
+                "Bloomberg/Aladdin/internal systems and validates "
+                "external recommendations against internal views "
+                "(buy/sell calls, allocations, risk scores, "
+                "conviction levels)."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
                     "external": {
                         "type": "string",
-                        "description": ("External research analysis"),
+                        "description": (
+                            "External research analysis from sell-side report"
+                        ),
                     },
-                    "internal": {
+                    "portfolio_id": {
                         "type": "string",
-                        "description": ("Internal investment view"),
+                        "description": (
+                            "Portfolio ID for internal comparison "
+                            "(mock: 'internal_portfolio')"
+                        ),
                     },
                 },
-                "required": ["external", "internal"],
+                "required": ["external"],
             },
             output_schema={
                 "type": "object",
                 "properties": {
+                    "internal_data": {
+                        "type": "object",
+                        "description": (
+                            "Simulated internal portfolio "
+                            "(Real: API returns buy/sell calls, "
+                            "allocations, risks)"
+                        ),
+                    },
                     "comparison": {
                         "type": "string",
-                        "description": "Detailed comparison",
+                        "description": "Detailed comparison analysis",
                     },
-                    "agreements": {
+                    "recommendations": {
                         "type": "array",
-                        "description": "Points of agreement",
+                        "description": (
+                            "Recommended actions based on comparison "
+                            "and validation"
+                        ),
                     },
-                    "disagreements": {
+                    "divergences": {
                         "type": "array",
-                        "description": ("Points of disagreement"),
+                        "description": (
+                            "Key areas where external and "
+                            "internal views diverge"
+                        ),
+                    },
+                    "validation_score": {
+                        "type": "number",
+                        "description": (
+                            "Confidence score (0-100) for recommendation "
+                            "alignment with internal view"
+                        ),
                     },
                 },
                 "required": ["comparison"],
             },
         )
 
-    async def __call__(self, external: str, internal: str) -> Dict[str, Any]:
-        """Execute comparison
+    async def __call__(
+        self, external: str, portfolio_id: str = "internal_portfolio"
+    ) -> Dict[str, Any]:
+        """Execute comparison with internal portfolio data
 
         Parameters
         ----------
         external : str
-            External research analysis
-        internal : str
-            Internal investment view
+            External research analysis from sell-side report
+        portfolio_id : str, optional
+            Portfolio identifier for internal comparison,
+            by default "internal_portfolio"
 
         Returns
         -------
         Dict[str, Any]
-            Dictionary containing comparison, agreements, and disagreements
+            Dictionary containing internal data, comparison,
+            and validation results
+
+        Note
+        ----
+        This mock returns simulated data. In production:
+        1. Query internal API: GET /portfolio/{portfolio_id}/current-view
+        2. Extract: buy_calls, sell_calls, asset_allocation, risk_scores
+        3. Compare external recommendations against internal positioning
+        4. Calculate alignment score
+        5. Return structured comparison for portfolio manager validation
         """
         try:
+            # MOCK: Simulated internal portfolio data
+            # In production, this would be fetched from:
+            # - Bloomberg Terminal API
+            # - Aladdin (BlackRock)
+            # - Charles River IMS
+            # - Internal database
+            mock_internal_data = {
+                "portfolio_id": portfolio_id,
+                "portfolio_type": "Multi-Asset",
+                "as_of_date": "2024-12-18",
+                "current_allocation": {
+                    "equities": 62,
+                    "fixed_income": 28,
+                    "commodities": 5,
+                    "alternatives": 5,
+                },
+                "buy_calls": [
+                    {
+                        "asset": "Technology",
+                        "conviction": "High",
+                        "target_allocation": 12,
+                        "current_allocation": 10,
+                        "rationale": "AI infrastructure opportunity",
+                    },
+                    {
+                        "asset": "Energy",
+                        "conviction": "Medium",
+                        "target_allocation": 5,
+                        "current_allocation": 3,
+                        "rationale": "Geopolitical supply premium",
+                    },
+                ],
+                "sell_calls": [
+                    {
+                        "asset": "Long-Duration Bonds",
+                        "conviction": "High",
+                        "target_allocation": 15,
+                        "current_allocation": 18,
+                        "rationale": "Limited upside at current yields",
+                    },
+                    {
+                        "asset": "Emerging Markets",
+                        "conviction": "Medium",
+                        "target_allocation": 7,
+                        "current_allocation": 10,
+                        "rationale": "Currency and political risks",
+                    },
+                ],
+                "risk_scores": {
+                    "market_risk": 6.5,
+                    "credit_risk": 4.2,
+                    "liquidity_risk": 3.1,
+                    "geopolitical_risk": 5.8,
+                },
+                "conviction_levels": {
+                    "macro_view": "Soft landing scenario",
+                    "growth_outlook": "Modest (2-3%)",
+                    "inflation_view": "Moderating to 2.5%",
+                    "rate_view": "Peaked, cuts coming H2",
+                },
+            }
+
+            # Generate comparison analysis with LLM
+            # Use natural language prompt that mirrors report style
             prompt = (
-                "Compare external sell-side recommendations "
-                "with internal views.\n\n"
-                f"EXTERNAL RESEARCH:\n{external}\n\n"
-                f"INTERNAL VIEW:\n{internal}\n\n"
-                "Provide:\n"
-                "1. Alignment in recommendations by asset\n"
-                "2. Divergence in macro views\n"
-                "3. Positioning rationale differences\n"
-                "4. Where views diverge most significantly\n"
-                "5. Recommended portfolio adjustments"
+                "You are a portfolio manager comparing external sell-side "
+                "research with internal portfolio views.\n\n"
+                "EXTERNAL RESEARCH:\n"
+                f"{external}\n\n"
+                "INTERNAL PORTFOLIO VIEW:\n"
+                f"Current positioning is cautiously constructive, with focus "
+                f"on quality and diversification.\n"
+                f"Key positions: Technology moderately favored, Long-duration "
+                f"bonds seen as limited opportunity, commodities seen as "
+                f"potentially attractive given geopolitical dynamics.\n"
+                f"Risk view: Market risks elevated but manageable, credit "
+                f"risks contained, geopolitical tensions "
+                f"warrant monitoring.\n\n"
+                "COMPARISON (write naturally, as in conversation with PM):\n"
+                "1. Are the external recommendations aligned with how you "
+                "see the market?\n"
+                "2. What areas stand out as notably different from your "
+                "internal view?\n"
+                "3. How would you characterize the overall confidence in "
+                "following this recommendation?\n"
+                "4. What concerns, if any, do you have?\n"
+                "5. Any specific actions you'd want to take or monitor?\n\n"
+                "Write naturally and conversationally (as if explaining to "
+                "colleagues), avoiding excessive numbers and focus on the "
+                "narrative reasoning."
             )
 
             messages = [
                 SystemMessage(
                     content=(
-                        "You are a portfolio manager comparing "
-                        "sell-side research with internal positioning."
+                        "You are a seasoned portfolio manager discussing "
+                        "external research. Write conversationally, focus on "
+                        "reasoning rather than data, and be realistic about "
+                        "confidence levels."
                     )
                 ),
                 HumanMessage(content=prompt),
             ]
 
             response = await self._invoke_llm(messages)
-            logger.info("Comparison tool: Completed comparison")
+            logger.info(
+                "Mock internal comparison: Completed validation analysis"
+            )
 
             return {
+                "internal_data": mock_internal_data,
                 "comparison": response,
-                "agreements": [],
-                "disagreements": [],
+                "recommendations": [
+                    "Consider the external recommendations as "
+                    "validation of our tech positioning",
+                    "Monitor how the energy thesis develops "
+                    "in coming weeks",
+                    "Use any pullbacks as potential entry " "opportunities",
+                ],
+                "divergences": [
+                    "Their equity overweight is slightly more aggressive "
+                    "than our current comfort level",
+                    "We align on tech opportunity but differ slightly "
+                    "on timing",
+                    "Bond positioning is broadly aligned",
+                ],
+                "validation_score": 75,
+                "data_source": "MOCK (Production: Bloomberg/Aladdin/API)",
+                "note": (
+                    "This is mock internal data for demonstration. "
+                    "In production, this fetches real internal "
+                    "portfolio data."
+                ),
             }
         except Exception as e:
-            logger.error(f"Comparison tool error: {e}")
-            return {"comparison": "", "error": str(e)}
+            logger.error(f"Mock internal comparison error: {e}")
+            return {
+                "comparison": "",
+                "error": str(e),
+                "data_source": "MOCK (Production: Bloomberg/Aladdin/API)",
+            }
 
     async def _invoke_llm(self, messages):
         """Invoke LLM asynchronously
@@ -552,22 +726,39 @@ class SynthesisTool:
             Dictionary containing final response
         """
         try:
-            context_str = "\n".join([f"{k}: {v}" for k, v in context.items()])
+            # Build context in natural, narrative format
+            # Focus on story and reasoning, not raw data dumps
+            summary = context.get("summary", "")
+            comparison = context.get("comparison_result", "")
 
             prompt = (
-                "Based on the analysis below, "
-                "provide a concise answer to the "
-                "user's query.\n\n"
-                f"USER QUERY: {query}\n\n"
-                f"CONTEXT:\n{context_str}\n\n"
-                "Provide a clear, actionable answer "
-                "with specific data points."
+                "Based on the sell-side research analysis below, "
+                "provide a clear, conversational answer to the user's "
+                "question.\n\n"
+                f"USER QUESTION: {query}\n\n"
+                f"RESEARCH SUMMARY:\n{summary}\n\n"
+            )
+
+            if comparison:
+                prompt += f"INTERNAL VALIDATION:\n{comparison}\n\n"
+
+            prompt += (
+                "Provide a natural, conversational response that:\n"
+                "1. Directly answers the user's question\n"
+                "2. Focuses on reasoning and narrative, not data dumps\n"
+                "3. Includes key insights (if any numbers are important, "
+                "weave them naturally)\n"
+                "4. Avoids overwhelming with statistics or bullet points\n"
+                "5. Explains what this means practically for the portfolio"
             )
 
             messages = [
                 SystemMessage(
-                    content="You are a financial analyst providing expert "
-                    "insights."
+                    content=(
+                        "You are a portfolio manager discussing sell-side "
+                        "research with colleagues. Be conversational, focus "
+                        "on reasoning and implications, avoid data overload."
+                    )
                 ),
                 HumanMessage(content=prompt),
             ]
@@ -618,7 +809,7 @@ class AgentToolRegistry:
         self.search = SearchTool(db_service)
         self.summarize = SummarizationTool(llm_service)
         self.extract = FinancialExtractionTool(llm_service)
-        self.compare = ComparisonTool(llm_service)
+        self.mock_comparison = MockInternalComparisonTool(llm_service)
         self.synthesize = SynthesisTool(llm_service)
 
         # Tool mapping
@@ -626,7 +817,7 @@ class AgentToolRegistry:
             "search_documents": self.search,
             "summarize_content": self.summarize,
             "extract_financial_data": self.extract,
-            "compare_analyses": self.compare,
+            "mock_internal_comparison": self.mock_comparison,
             "synthesize_response": self.synthesize,
         }
 
