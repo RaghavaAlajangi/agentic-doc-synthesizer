@@ -594,7 +594,6 @@ class AgentToolRegistry:
     def __init__(
         self,
         db_service,
-        financial_data_service,
         llm_service,
     ):
         """Initialize tool registry
@@ -602,11 +601,9 @@ class AgentToolRegistry:
         Parameters
         ----------
         db_service : DatabaseService
-            Database service
-        financial_data_service : FinancialDataService
-            Financial data service
+            Database service for vector search and metadata retrieval
         llm_service : LLMService
-            LLM service (ChatOpenAI instance)
+            LLM service (ChatOpenAI instance) for reasoning and extraction
         """
         # Initialize all tools
         self.search = SearchTool(db_service)
