@@ -63,6 +63,11 @@ services:
 
 volumes:
   chroma-external-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./chroma-data
 
 networks:
   agi-network:
