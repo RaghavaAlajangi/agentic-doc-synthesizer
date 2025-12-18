@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { documentService } from '../services/api';
 import '../styles/FileUpload.css';
+import { UploadProgress } from './UploadProgress';
 
 interface FileUploadProps {
   onUploadSuccess?: (response: any) => void;
@@ -176,6 +177,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           />
         </div>
 
+        <UploadProgress
+          isUploading={isUploading}
+          progress={uploadProgress}
+          filename={uploadedFiles.length > 0 ? undefined : undefined}
+        />
+
         {isUploading && uploadProgress > 0 && (
           <div className="progress-bar">
             <div
@@ -191,29 +198,37 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
       {uploadedFiles.length > 0 && (
         <div className="uploaded-files">
-          <h3>Uploaded Documents</h3>
+          <h3>📄 Uploaded Documents ({uploadedFiles.length})</h3>
           <div className="files-list">
             {uploadedFiles.map((file) => (
               <div
-                key={file.id || file.document_id}
+                key={file.document_id || file.id}
                 className="file-item"
               >
                 <div className="file-info">
                   <strong>
-                    {file.metadata?.filename || file.id}
+                    {file.filename ||
+                      file.metadata?.filename ||
+                      file.id}
                   </strong>
-                  {file.metadata?.file_size ? (
-                    <small>
-                      {(
-                        file.metadata.file_size / 1024
-                      ).toFixed(2)}{' '}
-                      KB
-                    </small>
-                  ) : (
-                    <small>
-                      Source: {file.source || sourceType}
-                    </small>
-                  )}
+                  <div className="file-details">
+                    {file.file_size ? (
+                      <small>
+                        📦 {(
+                          file.file_size / 1024
+                        ).toFixed(2)} KB
+                      </small>
+                    ) : (
+                      <small>
+                        📁 Source: {file.source || sourceType}
+                      </small>
+                    )}
+                    {file.stored_at && (
+                      <small>
+                        🕐 {new Date(file.stored_at).toLocaleDateString()}
+                      </small>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={() =>
@@ -221,7 +236,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                   }
                   className="delete-button"
                 >
-                  Delete
+                  ❌ Delete
                 </button>
               </div>
             ))}
