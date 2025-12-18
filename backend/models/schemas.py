@@ -116,17 +116,29 @@ class Citation(BaseModel):
 
     document_id: str = Field(..., description="ID of the source document")
     document_name: str = Field(..., description="Name of the source document")
-    page_number: Optional[int] = Field(
-        None, description="Page number in the document, if available"
+    page_number: Optional[str] = Field(
+        None,
+        description="Page number or range (e.g., '1-5', 'Pages 10-15')",
     )
     section: Optional[str] = Field(
         None, description="Section name in the document, if available"
     )
+    section_summary: Optional[str] = Field(
+        None, description="Summary of the section for quick reference"
+    )
     chunk_index: int = Field(
         ..., description="Index of the chunk within the document"
     )
+    total_chunks: Optional[int] = Field(
+        None, description="Total number of chunks in the document"
+    )
     content_snippet: str = Field(
         ..., description="First 200 characters of the content for preview"
+    )
+    vital_info: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Vital information extracted from the chunk (sectors, "
+        "recommendations, metrics, risks)",
     )
     chunk_metadata: ChunkMetadata = Field(
         default_factory=ChunkMetadata,
