@@ -7,111 +7,21 @@ from langchain.schema import HumanMessage, SystemMessage
 logger = logging.getLogger(__name__)
 
 
-class ToolDefinition:
-    """Base class for tool definitions"""
-
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        input_schema: Dict[str, Any],
-        output_schema: Dict[str, Any],
-    ):
-        """Initialize tool definition
-
-        Parameters
-        ----------
-        name : str
-            Unique tool identifier
-        description : str
-            Human-readable description
-        input_schema : Dict[str, Any]
-            Input parameters schema
-        output_schema : Dict[str, Any]
-            Output format schema
-        """
-        self.name = name
-        self.description = description
-        self.input_schema = input_schema
-        self.output_schema = output_schema
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Export tool definition as dictionary
-
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary representation of the tool definition
-        """
-        return {
-            "name": self.name,
-            "description": self.description,
-            "input_schema": self.input_schema,
-            "output_schema": self.output_schema,
-        }
-
-
 class SearchTool:
-    """Tool for searching research documents"""
+    """Tool for searching research document chunks from vector DB"""
 
     def __init__(self, db_service):
         """Initialize with database service
 
         Parameters
         ----------
-        db_service : DatabaseService
-            Database service for document operations
+        db_service : ChromaDBService
+            Vector database service for chunk retrieval
         """
         self.db = db_service
-        self.definition = ToolDefinition(
-            name="search_documents",
-            description=(
-                "Search research reports by semantic "
-                "similarity to find relevant content"
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": (
-                            "Search query to find " "relevant documents"
-                        ),
-                    },
-                    "n_results": {
-                        "type": "integer",
-                        "description": (
-                            "Number of results " "to return (default: 5)"
-                        ),
-                        "default": 5,
-                    },
-                },
-                "required": ["query"],
-            },
-            output_schema={
-                "type": "object",
-                "properties": {
-                    "results": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "document_id": {"type": "string"},
-                                "content": {"type": "string"},
-                                "similarity_score": {"type": "number"},
-                                "source": {"type": "string"},
-                                "metadata": {"type": "object"},
-                            },
-                        },
-                        "description": ("List of matching documents"),
-                    }
-                },
-                "required": ["results"],
-            },
-        )
 
     async def __call__(self, query: str, n_results: int = 5) -> Dict[str, Any]:
-        """Execute search
+        """Search for relevant chunks in vector database
 
         Parameters
         ----------
@@ -123,268 +33,68 @@ class SearchTool:
         Returns
         -------
         Dict[str, Any]
-            Search results dictionary containing results list
+            Dictionary with results list containing chunks with metadata
         """
         try:
             results = await self.db.search_documents(query, n_results)
-            logger.info(f"Search tool: Found {len(results)} results")
+            logger.info(f"Search tool: Found {len(results)} chunks")
             return {"results": results}
         except Exception as e:
             logger.error(f"Search tool error: {e}")
             return {"results": [], "error": str(e)}
 
 
-class SummarizationTool:
-    """Tool for summarizing research content"""
+class SQLiteTool:
+    """Tool for fetching document summaries from SQLite"""
 
-    def __init__(self, llm_service):
-        """Initialize with LLM service
+    def __init__(self, sqlite_service):
+        """Initialize with SQLite service
 
         Parameters
         ----------
-        llm_service : LLMService
-            LLM service for text generation
+        sqlite_service : SQLiteService
+            SQLite service for document summary retrieval
         """
-        self.llm = llm_service
-        self.definition = ToolDefinition(
-            name="summarize_content",
-            description=(
-                "Summarize research report content "
-                "into key findings and thesis"
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": ("Research content to summarize"),
-                    }
-                },
-                "required": ["content"],
-            },
-            output_schema={
-                "type": "object",
-                "properties": {
-                    "summary": {
-                        "type": "string",
-                        "description": ("Concise summary of the research"),
-                    },
-                    "key_points": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Top 5 key points",
-                    },
-                },
-                "required": ["summary"],
-            },
-        )
+        self.sqlite_db = sqlite_service
 
-    async def __call__(self, content: str) -> Dict[str, Any]:
-        """Execute summarization
-
-        Parameters
-        ----------
-        content : str
-            Content to summarize
+    async def __call__(self) -> Dict[str, Any]:
+        """Fetch all document summaries from SQLite
 
         Returns
         -------
         Dict[str, Any]
-            Dictionary containing summary and key points
+            Dictionary with summaries list
         """
         try:
-            prompt = (
-                "You are a sell-side research analyst. "
-                "Summarize the key investment recommendations "
-                "from this cross-asset research report.\n\n"
-                "Focus on:\n"
-                "1. Specific recommendations by asset class\n"
-                "2. Price targets and valuation levels\n"
-                "3. Recommended positioning and allocation\n"
-                "4. Key macro drivers and themes\n"
-                "5. Primary risks and catalysts\n"
-                "6. Timing and implementation guidance\n\n"
-                f"Content:\n{content}\n\n"
-                "Provide a comprehensive summary of "
-                "actionable recommendations."
-            )
+            if not self.sqlite_db:
+                return {"summaries": []}
 
-            messages = [
-                SystemMessage(
-                    content=("You are an expert sell-side research analyst.")
-                ),
-                HumanMessage(content=prompt),
+            summaries = await self.sqlite_db.get_all_summaries()
+            result = [
+                {
+                    "document_id": s.document_id,
+                    "filename": s.filename,
+                    "summary": s.summary_text,
+                    "chunk_count": s.chunk_count,
+                    "file_size": s.file_size,
+                    "source_type": s.source_type,
+                }
+                for s in summaries
             ]
-
-            response = await self._invoke_llm(messages)
             logger.info(
-                f"Summarization tool: Generated "
-                f"{len(response)} character summary"
+                f"SQLite tool: Retrieved {len(result)} document summaries"
             )
-
-            return {
-                "summary": response,
-                "key_points": ["See full summary for detailed points"],
-            }
+            return {"summaries": result}
         except Exception as e:
-            logger.error(f"Summarization tool error: {e}")
-            return {"summary": "", "error": str(e)}
-
-    async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously
-
-        Parameters
-        ----------
-        messages : list
-            List of messages to send to LLM
-
-        Returns
-        -------
-        str
-            LLM response content
-        """
-        response = await asyncio.to_thread(self.llm.invoke, messages)
-        return response.content
-
-
-class FinancialExtractionTool:
-    """Tool for extracting financial metrics and data"""
-
-    def __init__(self, llm_service):
-        """Initialize with LLM service
-
-        Parameters
-        ----------
-        llm_service : LLMService
-            LLM service for text generation
-        """
-        self.llm = llm_service
-        self.definition = ToolDefinition(
-            name="extract_financial_data",
-            description=(
-                "Extract key financial metrics, "
-                "valuations, and data points from "
-                "research content"
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": ("Research content to extract from"),
-                    }
-                },
-                "required": ["content"],
-            },
-            output_schema={
-                "type": "object",
-                "properties": {
-                    "metrics": {
-                        "type": "object",
-                        "description": ("Extracted financial metrics"),
-                    },
-                    "valuations": {
-                        "type": "array",
-                        "description": "Valuation multiples",
-                    },
-                    "targets": {
-                        "type": "array",
-                        "description": ("Price targets and forecasts"),
-                    },
-                },
-                "required": ["metrics"],
-            },
-        )
-
-    async def __call__(self, content: str) -> Dict[str, Any]:
-        """Execute financial extraction
-
-        Parameters
-        ----------
-        content : str
-            Content to extract financial data from
-
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary containing extracted metrics, valuations, and targets
-        """
-        try:
-            prompt = (
-                "Extract all recommendation metrics and "
-                "allocation guidance from this sell-side "
-                "cross-asset research.\n\n"
-                "Focus on:\n"
-                "1. Specific recommendations with ratings\n"
-                "2. Price targets and valuation ranges\n"
-                "3. Portfolio allocations by asset class\n"
-                "4. Performance drivers and catalysts\n"
-                "5. Forecast assumptions\n"
-                "6. Risk/reward analysis and rationale\n"
-                "7. Entry/exit levels and timing\n\n"
-                f"Content:\n{content}\n\n"
-                "Format as structured list of key metrics."
-            )
-
-            messages = [
-                SystemMessage(
-                    content=(
-                        "You are a sell-side research data "
-                        "specialist extracting metrics."
-                    )
-                ),
-                HumanMessage(content=prompt),
-            ]
-
-            response = await self._invoke_llm(messages)
-            logger.info("Financial extraction tool: Extracted data")
-
-            return {
-                "metrics": {"raw_extraction": response},
-                "valuations": [],
-                "targets": [],
-            }
-        except Exception as e:
-            logger.error(f"Financial extraction error: {e}")
-            return {"metrics": {}, "error": str(e)}
-
-    async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously
-
-        Parameters
-        ----------
-        messages : list
-            List of messages to send to LLM
-
-        Returns
-        -------
-        str
-            LLM response content
-        """
-        response = await asyncio.to_thread(self.llm.invoke, messages)
-        return response.content
+            logger.error(f"SQLite tool error: {e}")
+            return {"summaries": [], "error": str(e)}
 
 
 class MockInternalComparisonTool:
-    """Mock tool for comparing external and internal analysis
+    """Tool for comparing external research with internal portfolio views
 
-    IMPORTANT: This is a MOCK implementation!
-
-    In production, this tool should be replaced with an actual API
-    integration that fetches internal portfolio analysis from a real
-    data source such as:
-    - Bloomberg Terminal API
-    - Internal portfolio management system (e.g., Aladdin, Charles River)
-    - Custom internal analytics database
-    - Risk management systems (RiskMetrics, MSCI)
-
-    The mock returns simulated internal portfolio data for demonstration
-    purposes. Real implementation would:
-    1. Call external API: /internal-portfolio/analysis
-    2. Fetch internal buy/sell calls, risk scores, asset allocations
-    3. Retrieve internal conviction levels and position sizing
-    4. Query performance metrics and attribution
-    5. Return structured comparison data for external validation
+    Fetches mock internal portfolio data and provides comparison analysis.
+    In production, this would integrate with Bloomberg/Aladdin/internal APIs.
     """
 
     def __init__(self, llm_service):
@@ -393,84 +103,9 @@ class MockInternalComparisonTool:
         Parameters
         ----------
         llm_service : LLMService
-            LLM service for text generation
-
-        Note
-        ----
-        In production, this would also include API credentials and endpoints
-        for connecting to internal portfolio systems.
+            LLM service for comparison reasoning
         """
         self.llm = llm_service
-        self.definition = ToolDefinition(
-            name="mock_internal_comparison",
-            description=(
-                "MOCK: Compare external research with internal "
-                "portfolio analysis for validation. In production, "
-                "fetches real internal portfolio data from "
-                "Bloomberg/Aladdin/internal systems and validates "
-                "external recommendations against internal views "
-                "(buy/sell calls, allocations, risk scores, "
-                "conviction levels)."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "external": {
-                        "type": "string",
-                        "description": (
-                            "External research analysis from sell-side report"
-                        ),
-                    },
-                    "portfolio_id": {
-                        "type": "string",
-                        "description": (
-                            "Portfolio ID for internal comparison "
-                            "(mock: 'internal_portfolio')"
-                        ),
-                    },
-                },
-                "required": ["external"],
-            },
-            output_schema={
-                "type": "object",
-                "properties": {
-                    "internal_data": {
-                        "type": "object",
-                        "description": (
-                            "Simulated internal portfolio "
-                            "(Real: API returns buy/sell calls, "
-                            "allocations, risks)"
-                        ),
-                    },
-                    "comparison": {
-                        "type": "string",
-                        "description": "Detailed comparison analysis",
-                    },
-                    "recommendations": {
-                        "type": "array",
-                        "description": (
-                            "Recommended actions based on comparison "
-                            "and validation"
-                        ),
-                    },
-                    "divergences": {
-                        "type": "array",
-                        "description": (
-                            "Key areas where external and "
-                            "internal views diverge"
-                        ),
-                    },
-                    "validation_score": {
-                        "type": "number",
-                        "description": (
-                            "Confidence score (0-100) for recommendation "
-                            "alignment with internal view"
-                        ),
-                    },
-                },
-                "required": ["comparison"],
-            },
-        )
 
     async def __call__(
         self, external: str, portfolio_id: str = "internal_portfolio"
@@ -482,31 +117,15 @@ class MockInternalComparisonTool:
         external : str
             External research analysis from sell-side report
         portfolio_id : str, optional
-            Portfolio identifier for internal comparison,
-            by default "internal_portfolio"
+            Portfolio identifier, by default "internal_portfolio"
 
         Returns
         -------
         Dict[str, Any]
-            Dictionary containing internal data, comparison,
-            and validation results
-
-        Note
-        ----
-        This mock returns simulated data. In production:
-        1. Query internal API: GET /portfolio/{portfolio_id}/current-view
-        2. Extract: buy_calls, sell_calls, asset_allocation, risk_scores
-        3. Compare external recommendations against internal positioning
-        4. Calculate alignment score
-        5. Return structured comparison for portfolio manager validation
+            Comparison result with internal data and analysis
         """
         try:
-            # MOCK: Simulated internal portfolio data
-            # In production, this would be fetched from:
-            # - Bloomberg Terminal API
-            # - Aladdin (BlackRock)
-            # - Charles River IMS
-            # - Internal database
+            # Mock internal portfolio data
             mock_internal_data = {
                 "portfolio_id": portfolio_id,
                 "portfolio_type": "Multi-Asset",
@@ -541,127 +160,61 @@ class MockInternalComparisonTool:
                         "current_allocation": 18,
                         "rationale": "Limited upside at current yields",
                     },
-                    {
-                        "asset": "Emerging Markets",
-                        "conviction": "Medium",
-                        "target_allocation": 7,
-                        "current_allocation": 10,
-                        "rationale": "Currency and political risks",
-                    },
                 ],
                 "risk_scores": {
                     "market_risk": 6.5,
                     "credit_risk": 4.2,
                     "liquidity_risk": 3.1,
-                    "geopolitical_risk": 5.8,
-                },
-                "conviction_levels": {
-                    "macro_view": "Soft landing scenario",
-                    "growth_outlook": "Modest (2-3%)",
-                    "inflation_view": "Moderating to 2.5%",
-                    "rate_view": "Peaked, cuts coming H2",
                 },
             }
 
-            # Generate comparison analysis with LLM
-            # Use natural language prompt that mirrors report style
+            # Generate comparison with LLM
             prompt = (
-                "You are a portfolio manager comparing external sell-side "
-                "research with internal portfolio views.\n\n"
-                "EXTERNAL RESEARCH:\n"
-                f"{external}\n\n"
-                "INTERNAL PORTFOLIO VIEW:\n"
-                f"Current positioning is cautiously constructive, with focus "
-                f"on quality and diversification.\n"
-                f"Key positions: Technology moderately favored, Long-duration "
-                f"bonds seen as limited opportunity, commodities seen as "
-                f"potentially attractive given geopolitical dynamics.\n"
-                f"Risk view: Market risks elevated but manageable, credit "
-                f"risks contained, geopolitical tensions "
-                f"warrant monitoring.\n\n"
-                "COMPARISON (write naturally, as in conversation with PM):\n"
-                "1. Are the external recommendations aligned with how you "
-                "see the market?\n"
-                "2. What areas stand out as notably different from your "
-                "internal view?\n"
-                "3. How would you characterize the overall confidence in "
-                "following this recommendation?\n"
-                "4. What concerns, if any, do you have?\n"
-                "5. Any specific actions you'd want to take or monitor?\n\n"
-                "Write naturally and conversationally (as if explaining to "
-                "colleagues), avoiding excessive numbers and focus on the "
-                "narrative reasoning."
+                "Compare external sell-side research with our "
+                "internal portfolio views. Be conversational and "
+                "focus on reasoning rather than data dumps.\n\n"
+                f"EXTERNAL RESEARCH:\n{external}\n\n"
+                "INTERNAL VIEW:\n"
+                "We are cautiously constructive with focus on "
+                "quality. Moderately favor tech, skeptical on "
+                "long-duration bonds. Tracking geopolitical risks.\n\n"
+                "Provide natural comparison analysis (1-2 paragraphs)."
             )
 
             messages = [
                 SystemMessage(
                     content=(
-                        "You are a seasoned portfolio manager discussing "
-                        "external research. Write conversationally, focus on "
-                        "reasoning rather than data, and be realistic about "
-                        "confidence levels."
+                        "You are a portfolio manager comparing "
+                        "research. Be conversational and realistic."
                     )
                 ),
                 HumanMessage(content=prompt),
             ]
 
             response = await self._invoke_llm(messages)
-            logger.info(
-                "Mock internal comparison: Completed validation analysis"
-            )
+            logger.info("Mock comparison: Completed analysis")
 
             return {
                 "internal_data": mock_internal_data,
                 "comparison": response,
-                "recommendations": [
-                    "Consider the external recommendations as "
-                    "validation of our tech positioning",
-                    "Monitor how the energy thesis develops "
-                    "in coming weeks",
-                    "Use any pullbacks as potential entry " "opportunities",
-                ],
-                "divergences": [
-                    "Their equity overweight is slightly more aggressive "
-                    "than our current comfort level",
-                    "We align on tech opportunity but differ slightly "
-                    "on timing",
-                    "Bond positioning is broadly aligned",
-                ],
                 "validation_score": 75,
-                "data_source": "MOCK (Production: Bloomberg/Aladdin/API)",
-                "note": (
-                    "This is mock internal data for demonstration. "
-                    "In production, this fetches real internal "
-                    "portfolio data."
-                ),
             }
         except Exception as e:
-            logger.error(f"Mock internal comparison error: {e}")
-            return {
-                "comparison": "",
-                "error": str(e),
-                "data_source": "MOCK (Production: Bloomberg/Aladdin/API)",
-            }
+            logger.error(f"Mock comparison error: {e}")
+            return {"comparison": "", "error": str(e)}
 
     async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously
-
-        Parameters
-        ----------
-        messages : list
-            List of messages to send to LLM
-
-        Returns
-        -------
-        str
-            LLM response content
-        """
+        """Invoke LLM asynchronously"""
         response = await asyncio.to_thread(self.llm.invoke, messages)
         return response.content
 
 
 class SynthesisTool:
-    """Tool for synthesizing final responses"""
+    """Tool for generating final comprehensive response
+
+    Combines query understanding, chunk retrieval, and internal validation
+    to generate actionable investment guidance.
+    """
 
     def __init__(self, llm_service):
         """Initialize with LLM service
@@ -669,95 +222,86 @@ class SynthesisTool:
         Parameters
         ----------
         llm_service : LLMService
-            LLM service for text generation
+            LLM service for response generation
         """
         self.llm = llm_service
-        self.definition = ToolDefinition(
-            name="synthesize_response",
-            description=(
-                "Generate final answer by "
-                "synthesizing all collected "
-                "information"
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Original user query",
-                    },
-                    "context": {
-                        "type": "object",
-                        "description": (
-                            "Collected information "
-                            "(summary, data, comparison)"
-                        ),
-                    },
-                },
-                "required": ["query", "context"],
-            },
-            output_schema={
-                "type": "object",
-                "properties": {
-                    "response": {
-                        "type": "string",
-                        "description": ("Final answer to user query"),
-                    }
-                },
-                "required": ["response"],
-            },
-        )
 
     async def __call__(
-        self, query: str, context: Dict[str, Any]
+        self,
+        query: str,
+        chunks: List[str],
+        document_summaries: str,
+        comparison: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Execute synthesis
+        """Generate comprehensive response
+
+        Synthesizes response using:
+        - Top 5 retrieved chunks (all provided for context)
+        - Document-level summaries
+        - Optional internal portfolio comparison
 
         Parameters
         ----------
         query : str
-            User query
-        context : Dict[str, Any]
-            Collected context information
+            Original user query
+        chunks : List[str]
+            Retrieved chunk contents (all 5 chunks from search)
+        document_summaries : str
+            Document-level summaries from SQLite
+        comparison : Optional[str]
+            Internal portfolio comparison if available
 
         Returns
         -------
         Dict[str, Any]
-            Dictionary containing final response
+            Response with generated answer
         """
         try:
-            # Build context in natural, narrative format
-            # Focus on story and reasoning, not raw data dumps
-            summary = context.get("summary", "")
-            comparison = context.get("comparison_result", "")
+            # Use ALL retrieved chunks as context (not just first 3)
+            # This ensures the LLM has access to all relevant information
+            chunks_context = ""
+            if chunks:
+                chunks_list = []
+                for idx, chunk in enumerate(chunks, 1):
+                    chunks_list.append(f"[Chunk {idx}]\n{chunk}")
+                chunks_context = "\n\n---CHUNK SEPARATOR---\n\n".join(
+                    chunks_list
+                )
 
             prompt = (
-                "Based on the sell-side research analysis below, "
-                "provide a clear, conversational answer to the user's "
-                "question.\n\n"
+                "You are a sell-side research analyst providing "
+                "actionable investment guidance based on research "
+                "reports and internal portfolio analysis.\n\n"
                 f"USER QUESTION: {query}\n\n"
-                f"RESEARCH SUMMARY:\n{summary}\n\n"
+                f"DOCUMENT SUMMARIES:\n{document_summaries}\n\n"
             )
 
+            if chunks_context:
+                prompt += (
+                    f"DETAILED SECTIONS FROM RESEARCH "
+                    f"(Top 5 Most Relevant Chunks):\n\n"
+                    f"{chunks_context}\n\n"
+                )
+
             if comparison:
-                prompt += f"INTERNAL VALIDATION:\n{comparison}\n\n"
+                prompt += f"INTERNAL PORTFOLIO ASSESSMENT:\n{comparison}\n\n"
 
             prompt += (
-                "Provide a natural, conversational response that:\n"
-                "1. Directly answers the user's question\n"
-                "2. Focuses on reasoning and narrative, not data dumps\n"
-                "3. Includes key insights (if any numbers are important, "
-                "weave them naturally)\n"
-                "4. Avoids overwhelming with statistics or bullet points\n"
-                "5. Explains what this means practically for the portfolio"
+                "Provide a clear, conversational response that:\n"
+                "1. Directly addresses the user's question\n"
+                "2. Focuses on actionable recommendations\n"
+                "3. Weaves in key insights naturally from the chunks\n"
+                "4. Explains practical portfolio implications\n"
+                "5. Acknowledges internal validation if applicable\n"
+                "6. Cite specific sections when making key points"
             )
 
             messages = [
                 SystemMessage(
                     content=(
-                        "You are a portfolio manager discussing sell-side "
-                        "research with colleagues. Be conversational, focus "
-                        "on reasoning and implications, avoid data overload."
+                        "You are a portfolio manager synthesizing research "
+                        "and internal views. Be clear, conversational, and "
+                        "focus on actionable guidance."
                     )
                 ),
                 HumanMessage(content=prompt),
@@ -768,64 +312,54 @@ class SynthesisTool:
 
             return {"response": response}
         except Exception as e:
-            logger.error(f"Synthesis tool error: {e}")
+            logger.error(f"Synthesis error: {e}")
             return {"response": "", "error": str(e)}
 
     async def _invoke_llm(self, messages):
-        """Invoke LLM asynchronously
-
-        Parameters
-        ----------
-        messages : list
-            List of messages to send to LLM
-
-        Returns
-        -------
-        str
-            LLM response content
-        """
+        """Invoke LLM asynchronously"""
         response = await asyncio.to_thread(self.llm.invoke, messages)
         return response.content
 
 
 class AgentToolRegistry:
-    """Central registry of all available tools"""
+    """Registry of available tools for agent workflow"""
 
     def __init__(
         self,
         db_service,
+        sqlite_service,
         llm_service,
     ):
         """Initialize tool registry
 
         Parameters
         ----------
-        db_service : DatabaseService
-            Database service for vector search and metadata retrieval
+        db_service : ChromaDBService
+            Database service for chunk search
+        sqlite_service : SQLiteService
+            SQLite service for document summaries
         llm_service : LLMService
-            LLM service (ChatOpenAI instance) for reasoning and extraction
+            LLM service for reasoning and generation
         """
-        # Initialize all tools
+        # Initialize tools
         self.search = SearchTool(db_service)
-        self.summarize = SummarizationTool(llm_service)
-        self.extract = FinancialExtractionTool(llm_service)
-        self.mock_comparison = MockInternalComparisonTool(llm_service)
-        self.synthesize = SynthesisTool(llm_service)
+        self.sqlite = SQLiteTool(sqlite_service)
+        self.comparison = MockInternalComparisonTool(llm_service)
+        self.synthesis = SynthesisTool(llm_service)
 
         # Tool mapping
         self.tools_map = {
-            "search_documents": self.search,
-            "summarize_content": self.summarize,
-            "extract_financial_data": self.extract,
-            "mock_internal_comparison": self.mock_comparison,
-            "synthesize_response": self.synthesize,
+            "search_chunks": self.search,
+            "get_summaries": self.sqlite,
+            "compare_with_internal": self.comparison,
+            "generate_response": self.synthesis,
         }
 
         logger.info(
             f"Tool registry initialized with {len(self.tools_map)} tools"
         )
 
-    def get_tool(self, name: str) -> Optional[Any]:
+    def get_tool(self, name: str):
         """Get tool by name
 
         Parameters
@@ -835,7 +369,7 @@ class AgentToolRegistry:
 
         Returns
         -------
-        Optional[Any]
+        Optional[Tool]
             Tool instance if found, None otherwise
         """
         return self.tools_map.get(name)
@@ -846,27 +380,17 @@ class AgentToolRegistry:
         Returns
         -------
         Dict[str, Any]
-            Dictionary mapping tool names to tool instances
+            Dictionary of all tools
         """
         return self.tools_map
 
-    def get_tool_definitions(self) -> List[Dict[str, Any]]:
-        """Get all tool definitions for agent documentation
-
-        Returns
-        -------
-        List[Dict[str, Any]]
-            List of tool definition dictionaries
-        """
-        return [tool.definition.to_dict() for tool in self.tools_map.values()]
-
     def list_tools(self) -> List[str]:
-        """List all available tool names
+        """List all available tools
 
         Returns
         -------
         List[str]
-            List of available tool names
+            List of tool names
         """
         return list(self.tools_map.keys())
 
@@ -883,7 +407,7 @@ class AgentToolRegistry:
         Returns
         -------
         Dict[str, Any]
-            Tool result dictionary
+            Tool result
         """
         tool = self.get_tool(tool_name)
         if not tool:
