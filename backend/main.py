@@ -263,9 +263,10 @@ async def chat(request: ChatRequest):
     """
     Process chat query with agent-driven routing.
 
-    Routes the query through the multi-agent orchestrator which
-    determines query intent and executes appropriate agents for
-    analysis, comparison, or lookup operations.
+    Routes the query through the simplified 3-agent orchestrator:
+    1. Router - identifies subtasks
+    2. Executor - retrieves chunks and summaries
+    3. Analyst - generates final response
 
     Parameters
     ----------
@@ -277,7 +278,7 @@ async def chat(request: ChatRequest):
     -------
     ChatResponse
         Response containing synthesized answer, agent thoughts,
-        search results, and recommendations.
+        and citations.
 
     Raises
     ------
@@ -289,10 +290,8 @@ async def chat(request: ChatRequest):
 
         return ChatResponse(
             response=response["response"],
-            agent_thoughts=response["agent_thoughts"],
-            search_results=response["search_results"],
+            agent_thoughts=response.get("agent_thoughts", []),
             citations=response.get("citations", []),
-            recommendations=response["recommendations"],
             conversation_id=request.conversation_id,
         )
 
