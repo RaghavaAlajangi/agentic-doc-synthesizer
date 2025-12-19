@@ -87,7 +87,7 @@ export const Chat: React.FC = () => {
                     ? ` (using ${event.data.tool_used})`
                     : '';
                   msg.currentStep = (
-                    `🤖 ${event.data.agent} is thinking${toolInfo}`
+                    `🤖 ${event.data.agent_name || event.data.agent} is thinking${toolInfo}`
                   );
                   msg.stepStatus = 'in-progress';
                   break;
@@ -113,6 +113,7 @@ export const Chat: React.FC = () => {
 
                 case 'final_response':
                   msg.content = event.data.response;
+                  // ✅ Citations included in final_response at the end
                   msg.citations = event.data.citations || [];
                   msg.isStreaming = false;
                   msg.currentStep = 'Response generated';
