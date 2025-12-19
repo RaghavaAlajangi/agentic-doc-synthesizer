@@ -29,23 +29,24 @@ export interface SearchResult {
   document_id: string;
   content: string;
   similarity_score: number;
-  source: string;
   metadata: Record<string, any>;
 }
 
-export interface Recommendation {
-  asset_class: string;
-  recommendation: string;
-  confidence: number;
-  source_document: string;
-  source_type: string;
+export interface Citation {
+  document_id: string;
+  document_name: string;
+  page_number?: string;
+  section?: string;
+  chunk_index: number;
+  content_snippet: string;
+  similarity_score: number;
+  metadata: Record<string, any>;
 }
 
 export interface ChatResponse {
   response: string;
   agent_thoughts: AgentThought[];
-  search_results: SearchResult[];
-  recommendations: Recommendation[];
+  citations: Citation[];
   conversation_id?: string;
 }
 
