@@ -139,7 +139,7 @@ class AgentOrchestrator:
         """
         query = state["query"].lower()
 
-        subtasks = ["search_chunks"]  # Always search for relevant chunks
+        subtasks = ["retrieve_chunks"]  # Always search for relevant chunks
 
         # Determine if comparison is needed
         comparison_keywords = [
@@ -235,7 +235,7 @@ class AgentOrchestrator:
                     f"Retrieved {len(state['search_results'])} chunks as "
                     f"citations (relevance: {', '.join(scores)})"
                 ),
-                tool_used="search_chunks",
+                tool_used="retrieve_chunks",
                 tool_output=(
                     f"Found {len(state['search_results'])} chunks: "
                     f"{[c['document_name'] for c in citations]}"

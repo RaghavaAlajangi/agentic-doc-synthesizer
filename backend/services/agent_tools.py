@@ -7,8 +7,8 @@ from langchain.schema import HumanMessage, SystemMessage
 logger = logging.getLogger(__name__)
 
 
-class SearchTool:
-    """Tool for searching research document chunks from vector DB"""
+class RetrieveTool:
+    """Tool for retrieving research document chunks from vector DB"""
 
     def __init__(self, db_service):
         """Initialize with database service
@@ -21,7 +21,7 @@ class SearchTool:
         self.db = db_service
 
     async def __call__(self, query: str, n_results: int = 5) -> Dict[str, Any]:
-        """Search for relevant chunks in vector database
+        """Retrieve relevant chunks from vector database
 
         Parameters
         ----------
@@ -37,10 +37,10 @@ class SearchTool:
         """
         try:
             results = await self.db.search_documents(query, n_results)
-            logger.info(f"Search tool: Found {len(results)} chunks")
+            logger.info(f"Retrieve tool: Found {len(results)} chunks")
             return {"results": results}
         except Exception as e:
-            logger.error(f"Search tool error: {e}")
+            logger.error(f"Retrieve tool error: {e}")
             return {"results": [], "error": str(e)}
 
 
@@ -342,14 +342,14 @@ class AgentToolRegistry:
             LLM service for reasoning and generation
         """
         # Initialize tools
-        self.search = SearchTool(db_service)
+        self.search = RetrieveTool(db_service)
         self.sqlite = SQLiteTool(sqlite_service)
         self.comparison = MockInternalComparisonTool(llm_service)
         self.synthesis = SynthesisTool(llm_service)
 
         # Tool mapping
         self.tools_map = {
-            "search_chunks": self.search,
+            "retrieve_chunks": self.search,
             "get_summaries": self.sqlite,
             "compare_with_internal": self.comparison,
             "generate_response": self.synthesis,
