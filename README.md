@@ -21,23 +21,180 @@ Your objective is to build a minimal agent-based AI assistant that can summarize
 
 ## Quick Start
 
-### Backend Setup
+### Option 1: Docker Compose (Recommended - All-in-One)
+
+**Prerequisites:**
+- Docker Desktop or Docker Engine installed
+- Docker Compose installed (included with Docker Desktop)
+
+**Installation:**
+- **Windows/Mac**: Download [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- **Linux**: 
+  ```bash
+  # Install Docker
+  sudo apt-get update
+  sudo apt-get install docker.io docker-compose
+  sudo usermod -aG docker $USER
+  
+  # Start Docker service
+  sudo systemctl start docker
+  ```
+
+**Run with Docker Compose:**
+
+```bash
+# Navigate to project root
+cd agi-technical-challenge
+
+# Start all services (Backend, Frontend, Vector DB, SQLite)
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f backend    # View backend logs
+docker-compose logs -f frontend   # View frontend logs
+
+# Stop all services
+docker-compose down
+```
+
+**Accessing the Application:**
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+
+**Services Running:**
+- Backend (FastAPI): Port 8000
+- Frontend (React): Port 3000
+- Vector Database (Chroma): Port 8001
+- SQLite Database: Persisted in `chroma-data/`
+
+---
+
+### Option 2: Docker Individual Containers
+
+**Prerequisites:**
+- Docker installed
+
+**Build Backend Image:**
 
 ```bash
 cd backend
+docker build -t research-agent-backend:latest .
+docker run -d \
+  --name backend \
+  -p 8000:8000 \
+  -e OPENAI_API_KEY=your-key-here \
+  -v $(pwd)/../data:/app/data \
+  -v $(pwd)/../chroma-data:/app/chroma-data \
+  research-agent-backend:latest
+```
+
+**Run Backend Container:**
+
+```bash
+docker run -d \
+  --name backend \
+  -p 8000:8000 \
+  --env-file .env \
+  -v ./data:/app/data \
+  -v ./chroma-data:/app/chroma-data \
+  research-agent-backend:latest
+```
+
+**View Logs:**
+
+```bash
+docker logs -f backend
+```
+
+**Stop Container:**
+
+```bash
+docker stop backend
+docker rm backend
+```
+
+---
+
+### Option 3: Local Development (Manual Setup)
+
+**Prerequisites:**
+- Python 3.9+
+- Node.js 16+
+- pip
+- npm
+
+**Backend Setup:**
+
+```bash
+# Navigate to backend
+cd backend
+
+# Create virtual environment
 python -m venv venv
-venv\Scripts\activate  # On Windows
-# source venv/bin/activate  # On Linux/Mac
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On Linux/Mac:
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Set environment variables (create .env file or export)
+export OPENAI_API_KEY=your-key-here
+
+# Run backend server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Frontend Setup
+**Frontend Setup (New Terminal):**
 
 ```bash
+# Navigate to frontend
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start development server
 npm run dev
+```
+
+**Access the Application:**
+- Frontend: http://localhost:3000 (or http://localhost:5173 depending on Vite config)
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+
+---
+
+### Environment Variables
+
+Create a `.env` file in the `backend/` directory:
+
+```env
+# OpenAI Configuration
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4-turbo-preview
+OPENAI_TEMPERATURE=0.7
+
+# Document Processing
+CHUNK_SIZE=1024
+CHUNK_OVERLAP=128
+DOCUMENT_PROCESSOR_TEMPERATURE=0.5
+
+# Database Configuration
+EXTERNAL_CHROMA_HOST=localhost
+EXTERNAL_CHROMA_PORT=8001
+
+# API Configuration
+API_TITLE=Research Agent API
+API_VERSION=1.0.0
+LOG_LEVEL=INFO
+
+# CORS
+CORS_ORIGINS=["http://localhost:3000", "http://localhost:5173"]
 ```
 
 
