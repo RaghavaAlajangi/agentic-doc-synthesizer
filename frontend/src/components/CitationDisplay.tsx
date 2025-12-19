@@ -1,24 +1,15 @@
 import React, { useState } from 'react';
 import '../styles/CitationDisplay.css';
 
-interface VitalInfo {
-  sectors?: string[];
-  recommendations?: string[];
-  metrics?: Record<string, string | number>;
-  risks?: string[];
-}
-
 interface Citation {
   document_id: string;
   document_name: string;
   page_number?: string;
   section?: string;
-  section_summary?: string;
   chunk_index: number;
-  total_chunks?: number;
   content_snippet: string;
-  vital_info?: VitalInfo;
   similarity_score: number;
+  metadata: Record<string, any>;
 }
 
 interface CitationDisplayProps {
@@ -30,8 +21,6 @@ interface CitationDisplayProps {
  *
  * Displays source citations as beautiful reference cards with:
  * - Document name and location (page/section)
- * - Section summary for quick context
- * - Vital information extracted (sectors, recommendations, metrics, risks)
  * - Relevance score
  * - Content snippet preview
  */
@@ -48,49 +37,6 @@ export const CitationDisplay: React.FC<CitationDisplayProps> = ({
     setExpandedCitation(expandedCitation === index ? null : index);
   };
 
-  const formatVitalInfo = (vital_info: VitalInfo | undefined) => {
-    if (!vital_info) return null;
-
-    const items = [];
-
-    if (vital_info.sectors && vital_info.sectors.length > 0) {
-      items.push({
-        label: 'Sectors',
-        value: vital_info.sectors.join(', '),
-        icon: '🏢',
-      });
-    }
-
-    if (vital_info.recommendations && vital_info.recommendations.length > 0) {
-      items.push({
-        label: 'Recommendations',
-        value: vital_info.recommendations.join(', '),
-        icon: '💡',
-      });
-    }
-
-    if (vital_info.metrics && Object.keys(vital_info.metrics).length > 0) {
-      const metricsStr = Object.entries(vital_info.metrics)
-        .map(([key, val]) => `${key}: ${val}`)
-        .join(', ');
-      items.push({
-        label: 'Metrics',
-        value: metricsStr,
-        icon: '📊',
-      });
-    }
-
-    if (vital_info.risks && vital_info.risks.length > 0) {
-      items.push({
-        label: 'Risks',
-        value: vital_info.risks.join(', '),
-        icon: '⚠️',
-      });
-    }
-
-    return items;
-  };
-
   return (
     <div className="citations-container">
       <div className="citations-header">
@@ -103,7 +49,6 @@ export const CitationDisplay: React.FC<CitationDisplayProps> = ({
       <div className="citations-list">
         {citations.map((citation, idx) => {
           const isExpanded = expandedCitation === idx;
-          const vitalItems = formatVitalInfo(citation.vital_info);
           const relevancePercentage = Math.round(
             citation.similarity_score * 100
           );
@@ -154,32 +99,6 @@ export const CitationDisplay: React.FC<CitationDisplayProps> = ({
               {/* Citation Content - Expandable */}
               {isExpanded && (
                 <div className="citation-content">
-                  {/* Section Summary */}
-                  {citation.section_summary && (
-                    <div className="citation-summary">
-                      <h5>Summary</h5>
-                      <p>{citation.section_summary}</p>
-                    </div>
-                  )}
-
-                  {/* Vital Information */}
-                  {vitalItems && vitalItems.length > 0 && (
-                    <div className="citation-vital-info">
-                      <h5>Key Information</h5>
-                      <div className="vital-items">
-                        {vitalItems.map((item, itemIdx) => (
-                          <div key={itemIdx} className="vital-item">
-                            <span className="vital-icon">{item.icon}</span>
-                            <div className="vital-content">
-                              <span className="vital-label">{item.label}:</span>
-                              <span className="vital-value">{item.value}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Content Snippet */}
                   <div className="citation-snippet">
                     <h5>Content Preview</h5>
@@ -193,9 +112,6 @@ export const CitationDisplay: React.FC<CitationDisplayProps> = ({
                   <div className="citation-footer">
                     <span className="metadata-item">
                       Chunk {citation.chunk_index + 1}
-                      {citation.total_chunks
-                        ? ` of ${citation.total_chunks}`
-                        : ''}
                     </span>
                     <span className="metadata-item">
                       ID: {citation.document_id.substring(0, 8)}...
