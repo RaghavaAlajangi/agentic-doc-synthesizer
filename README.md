@@ -20,7 +20,7 @@ Your objective is to build a minimal agent-based AI assistant that can summarize
 > **Note**: Sample sell-side research reports (PDFs) will be provided separately after you accept the challenge.
 
 ## Demo Video
-![alt text](agi_coding_challenge_2.gif)
+![alt text](agi_coding_challenge_3.gif)
 ## Quick Start
 
 ### Option 1: Docker Compose (Recommended - All-in-One)
