@@ -19,6 +19,8 @@ Your objective is to build a minimal agent-based AI assistant that can summarize
 
 > **Note**: Sample sell-side research reports (PDFs) will be provided separately after you accept the challenge.
 
+## Demo Video
+![alt text](agi_coding_challenge_2.gif)
 ## Quick Start
 
 ### Option 1: Docker Compose (Recommended - All-in-One)
@@ -46,8 +48,10 @@ Your objective is to build a minimal agent-based AI assistant that can summarize
 # Navigate to project root
 cd agi-technical-challenge
 
+# Rename env.example to .env and update variable
+
 # Start all services (Backend, Frontend, Vector DB, SQLite)
-docker-compose up -d
+docker-compose up --build -d
 
 # Check logs
 docker-compose logs -f backend    # View backend logs
@@ -116,88 +120,6 @@ docker rm backend
 
 ---
 
-### Option 3: Local Development (Manual Setup)
-
-**Prerequisites:**
-- Python 3.9+
-- Node.js 16+
-- pip
-- npm
-
-**Backend Setup:**
-
-```bash
-# Navigate to backend
-cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On Linux/Mac:
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set environment variables (create .env file or export)
-export OPENAI_API_KEY=your-key-here
-
-# Run backend server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Frontend Setup (New Terminal):**
-
-```bash
-# Navigate to frontend
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-**Access the Application:**
-- Frontend: http://localhost:3000 (or http://localhost:5173 depending on Vite config)
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
-
----
-
-### Environment Variables
-
-Create a `.env` file in the `backend/` directory:
-
-```env
-# OpenAI Configuration
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_MODEL=gpt-4-turbo-preview
-OPENAI_TEMPERATURE=0.7
-
-# Document Processing
-CHUNK_SIZE=1024
-CHUNK_OVERLAP=128
-DOCUMENT_PROCESSOR_TEMPERATURE=0.5
-
-# Database Configuration
-EXTERNAL_CHROMA_HOST=localhost
-EXTERNAL_CHROMA_PORT=8001
-
-# API Configuration
-API_TITLE=Research Agent API
-API_VERSION=1.0.0
-LOG_LEVEL=INFO
-
-# CORS
-CORS_ORIGINS=["http://localhost:3000", "http://localhost:5173"]
-```
-
-
 ## Design Concepts
 
 ### Data Pipeline & Ingestion
@@ -206,7 +128,20 @@ CORS_ORIGINS=["http://localhost:3000", "http://localhost:5173"]
 
 The system processes research documents through the following pipeline:
 
-Raw Documents  Chunking  Vector Database  Metadata Storage  SQLite DB  API Response
+```bash
+Raw Financial Report
+   ↓
+Structure-aware semantic chunking
+   ↓
+Vector DB (raw chunks only for RAG retrivel)
+   ↓
+Section/chunk-level summaries (metadata in Vector DB)
+   ↓
+Document-level summary (SQlite DB)
+   ↓
+API serving
+```
+
 
 - **Raw Data Ingestion**: PDFs are uploaded and processed
 - **Chunking Strategy**: Documents are split into semantic chunks for efficient processing
@@ -266,6 +201,7 @@ The system uses a streamlined multi-agent orchestration built with LangGraph:
 
 ## Limitations
 
+- **No Evaluation**: ETL pipeline & Agent responses are not evaluated
 - **No Testing**: Unit and integration tests not implemented
 - **No CI/CD**: No automated build or deployment pipeline
 - **No Authentication**: Public API endpoints without authentication mechanisms
