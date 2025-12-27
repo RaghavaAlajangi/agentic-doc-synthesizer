@@ -1,29 +1,12 @@
-# Agentic AI PoC - Technical Challenge
+# Agentic-DOC-Synthesizer (FinLens)
 
-> **IMPORTANT NOTE**: **DO NOT** create a branch or raise a PR on this repository. Instead, you must **fork this repository** and share your solution with the hiring manager.
+FinLens is a multi-agent RAG system designed for analyzing large financial reports.
+It enables cross-asset comparison, investment opportunity discovery, and synthesis of external reports with proprietary analysis.
 
-Your objective is to build a minimal agent-based AI assistant that can summarize and extract key recommendations from sell-side cross-asset research reports (from investment banks like Goldman Sachs, JP Morgan, UBS, etc.) to compare with internal investment views.
-
-### Core Requirements
-
-- **Upload and index** sell-side research reports for semantic search (store in database of your choice)
-- **Chat interface** where users can ask questions about cross-asset recommendations (equity, fixed income, multi-asset)
-- **Multi-agent workflow** that interprets queries, extracts recommendations, and decides which tools to call automatically
-- **Mock integrations** for internal knowledge sources (historical recommendations, analyst tracking, etc.)
-
-### Technical Requirements
-
-- Use any **open-source agentic framework** (MS Agent Framework, Semantic Kernel, AutoGen, LangGraph, etc.)
-- Include a **router/planner agent** to determine which specialized agents to call
-- **Streaming responses** showing agent thoughts and final answers
-
-> **Note**: Sample sell-side research reports (PDFs) will be provided separately after you accept the challenge.
 
 ## Demo Video
-![alt text](agi_coding_challenge_rsize.gif)
-## Quick Start
 
-### Option 1: Docker Compose (Recommended - All-in-One)
+## Quick Start
 
 **Prerequisites:**
 - Docker Desktop or Docker Engine installed
@@ -46,7 +29,7 @@ Your objective is to build a minimal agent-based AI assistant that can summarize
 
 ```bash
 # Navigate to project root
-cd agi-technical-challenge
+cd agentic-doc-synthesizer
 
 # Rename env.example to .env and update variable
 
@@ -62,61 +45,15 @@ docker-compose down
 ```
 
 **Accessing the Application:**
-- **Frontend**: http://localhost:3000
+- **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 
 **Services Running:**
 - Backend (FastAPI): Port 8000
-- Frontend (React): Port 3000
+- Frontend (React): Port 5173
 - Vector Database (Chroma): Port 8001
 - SQLite Database: Persisted in `chroma-data/`
-
----
-
-### Option 2: Docker Individual Containers
-
-**Prerequisites:**
-- Docker installed
-
-**Build Backend Image:**
-
-```bash
-cd backend
-docker build -t research-agent-backend:latest .
-docker run -d \
-  --name backend \
-  -p 8000:8000 \
-  -e OPENAI_API_KEY=your-key-here \
-  -v $(pwd)/../data:/app/data \
-  -v $(pwd)/../chroma-data:/app/chroma-data \
-  research-agent-backend:latest
-```
-
-**Run Backend Container:**
-
-```bash
-docker run -d \
-  --name backend \
-  -p 8000:8000 \
-  --env-file .env \
-  -v ./data:/app/data \
-  -v ./chroma-data:/app/chroma-data \
-  research-agent-backend:latest
-```
-
-**View Logs:**
-
-```bash
-docker logs -f backend
-```
-
-**Stop Container:**
-
-```bash
-docker stop backend
-docker rm backend
-```
 
 ---
 
