@@ -3,7 +3,6 @@
 FinLens is a multi-agent RAG system designed for analyzing large financial reports.
 It enables cross-asset comparison, investment opportunity discovery, and synthesis of external reports with proprietary analysis.
 
-
 ## Demo Video
 
 ## Quick Start
