@@ -9,10 +9,10 @@ class Settings(BaseSettings):
     # ==================== API Configuration ====================
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
     api_port: int = int(os.getenv("API_PORT", "8000"))
-    api_title: str = "Agentic AI Research Assistant"
+    api_title: str = "FinLens"
     api_version: str = "1.0.0"
 
-    # CORS Configuration
+    # CORS Configuration - always use defaults, don't parse from env
     cors_origins: list = [
         "http://localhost:3000",
         "http://localhost:3001",

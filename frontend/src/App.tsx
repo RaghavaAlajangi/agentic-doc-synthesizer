@@ -25,9 +25,9 @@ function App() {
       <div className="app-layout">
         <aside className="sidebar">
           <div className="sidebar-header">
-            <h2>Research Assistant</h2>
+            <h2>FinLens</h2>
             <p className="subtitle">
-              Sell-side research analysis
+              Financial report analysis
             </p>
           </div>
 
@@ -58,7 +58,7 @@ function App() {
               <h4>About</h4>
               <p>
                 Multi-agent AI assistant for analyzing
-                cross-asset research reports.
+                financial reports.
               </p>
             </div>
 
